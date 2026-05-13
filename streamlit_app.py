@@ -3,7 +3,7 @@ import pandas as pd
 
 st.set_page_config(page_title="Zoy Finance", layout="wide")
 
-# 🔗 LINK CORRETO DA SUA PLANILHA (CSV)
+# 🔗 LINK DA PLANILHA
 url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSnOO6m8TRBKpN4vMJ8hWwy9Jh7J1m3vOYmy60_XU_WgGoXpMrjxVIr8S2Z50d9BLY_t3wqfdp3S-f5/pub?output=csv"
 
 # 📥 LENDO DADOS
@@ -50,15 +50,6 @@ st.markdown("""
     border-radius: 16px;
     border: 1px solid #e6e6e6;
     margin-bottom: 18px;
-}
-.badge {
-    display: inline-block;
-    padding: 6px 10px;
-    border-radius: 999px;
-    background-color: #f3e8ff;
-    color: #6b21a8;
-    font-weight: 600;
-    font-size: 13px;
 }
 .small {
     color: #777;
@@ -113,51 +104,43 @@ st.subheader("Extrato")
 # 📦 LISTA DE PAGAMENTOS
 for i, pagamento in enumerate(pagamentos):
 
+    status = pagamento["status"]
+
+    if status == "Aguardando Nota Fiscal":
+        badge_color = "#fff7ed"
+        badge_text = "🟡 Aguardando NF"
+        mensagem = "Você precisa emitir e enviar sua nota fiscal."
+    elif status == "NF Enviada":
+        badge_color = "#eff6ff"
+        badge_text = "🔵 NF Enviada"
+        mensagem = "Sua nota está em análise pelo financeiro."
+    elif status == "NF Reprovada":
+        badge_color = "#fef2f2"
+        badge_text = "🔴 NF Reprovada"
+        mensagem = "Sua nota foi reprovada. Ajuste e envie novamente."
+    elif status == "Pagamento Programado":
+        badge_color = "#f0fdf4"
+        badge_text = "🟢 Pagamento Programado"
+        mensagem = "Pagamento já está sendo processado."
+    elif status == "Pago":
+        badge_color = "#ecfdf5"
+        badge_text = "💰 Pago"
+        mensagem = "Pagamento já foi realizado."
+    else:
+        badge_color = "#f3f4f6"
+        badge_text = status
+        mensagem = ""
+
     st.markdown(f"""
     <div class="box">
-        status = pagamento["status"]
-
-if status == "Aguardando Nota Fiscal":
-    badge_color = "#fff7ed"
-    badge_text = "🟡 Aguardando NF"
-    mensagem = "Você precisa emitir e enviar sua nota fiscal."
-elif status == "NF Enviada":
-    badge_color = "#eff6ff"
-    badge_text = "🔵 NF Enviada"
-    mensagem = "Sua nota está em análise pelo financeiro."
-elif status == "NF Reprovada":
-    badge_color = "#fef2f2"
-    badge_text = "🔴 NF Reprovada"
-    mensagem = "Sua nota foi reprovada. Ajuste e envie novamente."
-elif status == "Pagamento Programado":
-    badge_color = "#f0fdf4"
-    badge_text = "🟢 Pagamento Programado"
-    mensagem = "Pagamento já está sendo processado."
-elif status == "Pago":
-    badge_color = "#ecfdf5"
-    badge_text = "💰 Pago"
-    mensagem = "Pagamento já foi realizado."
-else:
-    badge_color = "#f3f4f6"
-    badge_text = status
-    mensagem = ""
-
-st.markdown(f"""
-<div class="box">
-    <span style="background:{badge_color}; padding:6px 10px; border-radius:999px; font-weight:600;">
-        {badge_text}
-    </span>
-    <h3>{moeda(pagamento["valor"])}</h3>
-    <p><b>Campanha:</b> {pagamento["campanha"]}</p>
-    <p><b>Tomador:</b> {pagamento["tomador"]}</p>
-    <p class="small">Criado em {pagamento["data_criacao"]}</p>
-    <p style="margin-top:10px; font-weight:500;">{mensagem}</p>
-</div>
-""", unsafe_allow_html=True)
+        <span style="background:{badge_color}; padding:6px 10px; border-radius:999px; font-weight:600;">
+            {badge_text}
+        </span>
         <h3>{moeda(pagamento["valor"])}</h3>
         <p><b>Campanha:</b> {pagamento["campanha"]}</p>
         <p><b>Tomador:</b> {pagamento["tomador"]}</p>
         <p class="small">Criado em {pagamento["data_criacao"]}</p>
+        <p style="margin-top:10px; font-weight:500;">{mensagem}</p>
     </div>
     """, unsafe_allow_html=True)
 
