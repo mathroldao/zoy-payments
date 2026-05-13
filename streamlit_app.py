@@ -70,6 +70,9 @@ def atualizar_nf(row_index, numero, valor, link_arquivo):
     worksheet.update(f"O{row_index}:O{row_index}", [[datetime.now().strftime("%d/%m/%Y %H:%M")]])
     worksheet.update(f"E{row_index}:E{row_index}", [["NF Enviada"]])
 
+def atualizar_status(row_index, novo_status):
+    worksheet.update(f"E{row_index}:E{row_index}", [[novo_status]])
+
 st.markdown("""
 <style>
 .card {
@@ -116,6 +119,9 @@ st.markdown("""
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
+if "tipo_usuario" not in st.session_state:
+    st.session_state.tipo_usuario = ""
+
 if "influenciador_logado" not in st.session_state:
     st.session_state.influenciador_logado = ""
 
@@ -124,42 +130,168 @@ if not st.session_state.logado:
     st.markdown("<div class='login-box'>", unsafe_allow_html=True)
 
     st.title("Portal Financeiro Zoy")
-    st.write("Acesse sua carteira para visualizar pagamentos e enviar notas fiscais.")
+    st.write("Acesse sua carteira ou painel financeiro.")
 
     email_digitado = st.text_input("E-mail")
     senha_digitada = st.text_input("Senha", type="password")
 
     if st.button("Entrar"):
 
-        usuario = df[
-            (df["email"].astype(str).str.strip().str.lower() == email_digitado.strip().lower()) &
-            (df["senha"].astype(str).str.strip() == senha_digitada.strip())
-        ]
+        admin_email = st.secrets["admin"]["email"]
+        admin_senha = st.secrets["admin"]["senha"]
 
-        if len(usuario) > 0:
+        if email_digitado.strip().lower() == admin_email.strip().lower() and senha_digitada.strip() == admin_senha.strip():
             st.session_state.logado = True
-            st.session_state.influenciador_logado = usuario.iloc[0]["influenciador"]
+            st.session_state.tipo_usuario = "admin"
             st.rerun()
+
         else:
-            st.error("E-mail ou senha inválidos.")
+            usuario = df[
+                (df["email"].astype(str).str.strip().str.lower() == email_digitado.strip().lower()) &
+                (df["senha"].astype(str).str.strip() == senha_digitada.strip())
+            ]
+
+            if len(usuario) > 0:
+                st.session_state.logado = True
+                st.session_state.tipo_usuario = "influenciador"
+                st.session_state.influenciador_logado = usuario.iloc[0]["influenciador"]
+                st.rerun()
+            else:
+                st.error("E-mail ou senha inválidos.")
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 # -----------------------------
-# ÁREA LOGADA
+# SIDEBAR
 # -----------------------------
-influenciador_selecionado = st.session_state.influenciador_logado
-
 with st.sidebar:
     st.title("Acesso")
-    st.write(f"Logado como:")
-    st.write(f"**{influenciador_selecionado}**")
+
+    if st.session_state.tipo_usuario == "admin":
+        st.write("Logado como:")
+        st.write("**Financeiro Zoy**")
+    else:
+        st.write("Logado como:")
+        st.write(f"**{st.session_state.influenciador_logado}**")
 
     if st.button("Sair"):
         st.session_state.logado = False
+        st.session_state.tipo_usuario = ""
         st.session_state.influenciador_logado = ""
         st.rerun()
+
+# -----------------------------
+# PAINEL ADMIN
+# -----------------------------
+if st.session_state.tipo_usuario == "admin":
+
+    st.title("Painel Financeiro Zoy")
+    st.write("Acompanhe as ordens de pagamento, notas fiscais enviadas e status de pagamento.")
+
+    total_op = df["valor"].sum()
+    total_nf_enviada = df[df["status"] == "NF Enviada"]["valor"].sum()
+    total_programado = df[df["status"] == "Pagamento Programado"]["valor"].sum()
+    total_pago = df[df["status"] == "Pago"]["valor"].sum()
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.markdown(f"""
+        <div class="card">
+            <div class="card-title">Total em OPs</div>
+            <div class="card-value">{moeda(total_op)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+        <div class="card">
+            <div class="card-title">NF Enviada</div>
+            <div class="card-value">{moeda(total_nf_enviada)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+        <div class="card">
+            <div class="card-title">Pagamento Programado</div>
+            <div class="card-value">{moeda(total_programado)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown(f"""
+        <div class="card">
+            <div class="card-title">Pago</div>
+            <div class="card-value">{moeda(total_pago)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    status_filtro = st.selectbox(
+        "Filtrar por status",
+        ["Todos", "Aguardando Nota Fiscal", "NF Enviada", "NF Reprovada", "Pagamento Programado", "Pago"]
+    )
+
+    if status_filtro != "Todos":
+        df_admin = df[df["status"] == status_filtro]
+    else:
+        df_admin = df
+
+    st.subheader("Ordens de Pagamento")
+
+    for index, row in df_admin.iterrows():
+
+        linha_real = index + 2
+
+        st.markdown(f"""
+        <div class="box">
+            <h3>{moeda(row["valor"])}</h3>
+            <p><b>Influenciador:</b> {row["influenciador"]}</p>
+            <p><b>Campanha:</b> {row["campanha"]}</p>
+            <p><b>Status:</b> {row["status"]}</p>
+            <p><b>Número NF:</b> {row.get("numero_nf", "")}</p>
+            <p><b>Data envio NF:</b> {row.get("data_envio_nf", "")}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if row.get("arquivo_nf", ""):
+            st.markdown(f"[Abrir NF enviada]({row['arquivo_nf']})")
+
+        col_a, col_b, col_c, col_d = st.columns(4)
+
+        with col_a:
+            if st.button("Aprovar NF", key=f"aprovar_{index}"):
+                atualizar_status(linha_real, "Pagamento Programado")
+                st.success("NF aprovada. Status alterado para Pagamento Programado.")
+                st.rerun()
+
+        with col_b:
+            if st.button("Reprovar NF", key=f"reprovar_{index}"):
+                atualizar_status(linha_real, "NF Reprovada")
+                st.warning("NF reprovada. Influenciador poderá reenviar.")
+                st.rerun()
+
+        with col_c:
+            if st.button("Marcar como Pago", key=f"pago_{index}"):
+                atualizar_status(linha_real, "Pago")
+                st.success("Pagamento marcado como Pago.")
+                st.rerun()
+
+        with col_d:
+            if st.button("Voltar para Aguardando NF", key=f"aguardando_{index}"):
+                atualizar_status(linha_real, "Aguardando Nota Fiscal")
+                st.info("Status alterado para Aguardando Nota Fiscal.")
+                st.rerun()
+
+    st.stop()
+
+# -----------------------------
+# PORTAL INFLUENCIADOR
+# -----------------------------
+influenciador_selecionado = st.session_state.influenciador_logado
 
 df_filtrado = df[df["influenciador"] == influenciador_selecionado]
 pagamentos = df_filtrado.to_dict(orient="records")
