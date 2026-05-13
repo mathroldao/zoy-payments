@@ -3,14 +3,29 @@ import pandas as pd
 
 st.set_page_config(page_title="Zoy Finance", layout="wide")
 
-# 🔗 LINK DA PLANILHA
+# LINK DA PLANILHA
 url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSnOO6m8TRBKpN4vMJ8hWwy9Jh7J1m3vOYmy60_XU_WgGoXpMrjxVIr8S2Z50d9BLY_t3wqfdp3S-f5/pub?output=csv"
 
-# 📥 LENDO DADOS
+# LENDO DADOS
 df = pd.read_csv(url)
-pagamentos = df.to_dict(orient="records")
+df = df.fillna("")
 
-# 💰 FORMATAÇÃO DE MOEDA
+# GARANTE QUE VALOR É NÚMERO
+df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
+
+# FILTRO DE INFLUENCIADOR
+influenciadores = sorted(df["influenciador"].dropna().unique())
+
+st.sidebar.title("Acesso")
+influenciador_selecionado = st.sidebar.selectbox(
+    "Selecione o influenciador",
+    influenciadores
+)
+
+df_filtrado = df[df["influenciador"] == influenciador_selecionado]
+pagamentos = df_filtrado.to_dict(orient="records")
+
+# FORMATAÇÃO DE MOEDA
 def moeda(valor):
     try:
         valor = float(valor)
@@ -18,17 +33,18 @@ def moeda(valor):
         valor = 0
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-# 📊 CÁLCULOS
+# CÁLCULOS
 total_recebido = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pago")
 
 valor_estimado = sum(float(p["valor"]) for p in pagamentos if p["status"] in [
     "Aguardando Nota Fiscal",
-    "NF Enviada"
+    "NF Enviada",
+    "NF Reprovada"
 ])
 
 aguardando_pagamento = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pagamento Programado")
 
-# 🎨 ESTILO
+# ESTILO
 st.markdown("""
 <style>
 .card {
@@ -64,11 +80,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 🧾 TÍTULO
+# TÍTULO
 st.title("Carteira")
-st.write("Gerencie seus recebíveis, acompanhe seu saldo e envie suas notas fiscais.")
+st.write(f"Olá, **{influenciador_selecionado}**. Gerencie seus recebíveis, acompanhe seu saldo e envie suas notas fiscais.")
 
-# 📊 RESUMO
+# RESUMO
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -101,30 +117,33 @@ with col3:
 st.markdown("---")
 st.subheader("Extrato")
 
-# 📦 LISTA DE PAGAMENTOS
+if len(pagamentos) == 0:
+    st.info("Nenhuma ordem de pagamento encontrada para este influenciador.")
+
+# LISTA DE PAGAMENTOS
 for i, pagamento in enumerate(pagamentos):
 
     status = pagamento["status"]
 
     if status == "Aguardando Nota Fiscal":
         badge_color = "#fff7ed"
-        badge_text = "🟡 Aguardando NF"
+        badge_text = "Aguardando NF"
         mensagem = "Você precisa emitir e enviar sua nota fiscal."
     elif status == "NF Enviada":
         badge_color = "#eff6ff"
-        badge_text = "🔵 NF Enviada"
+        badge_text = "NF Enviada"
         mensagem = "Sua nota está em análise pelo financeiro."
     elif status == "NF Reprovada":
         badge_color = "#fef2f2"
-        badge_text = "🔴 NF Reprovada"
+        badge_text = "NF Reprovada"
         mensagem = "Sua nota foi reprovada. Ajuste e envie novamente."
     elif status == "Pagamento Programado":
         badge_color = "#f0fdf4"
-        badge_text = "🟢 Pagamento Programado"
+        badge_text = "Pagamento Programado"
         mensagem = "Pagamento já está sendo processado."
     elif status == "Pago":
         badge_color = "#ecfdf5"
-        badge_text = "💰 Pago"
+        badge_text = "Pago"
         mensagem = "Pagamento já foi realizado."
     else:
         badge_color = "#f3f4f6"
@@ -157,7 +176,7 @@ for i, pagamento in enumerate(pagamentos):
         </div>
         """, unsafe_allow_html=True)
 
-        if pagamento["status"] == "Aguardando Nota Fiscal":
+        if pagamento["status"] in ["Aguardando Nota Fiscal", "NF Reprovada"]:
 
             st.markdown("### Enviar Nota Fiscal")
 
