@@ -67,13 +67,17 @@ def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf,
         html = f"""
         <p>Olá, {influenciador}.</p>
         <p>Seu acesso ao Portal Financeiro Zoy foi criado e você possui uma nova ordem de pagamento disponível para emissão de nota fiscal.</p>
-        <p><b>Campanha:</b> {campanha}<br>
-        <b>Valor:</b> {moeda(valor)}<br>
-        <b>Prazo para envio da NF:</b> {prazo_nf}<br>
-        <b>Data prevista de pagamento:</b> {data_pagamento}</p>
-        <p><b>Dados de acesso:</b><br>
-        E-mail: {email_acesso}<br>
-        Senha: {senha_acesso}</p>
+        <p>
+            <b>Campanha:</b> {campanha}<br>
+            <b>Valor:</b> {moeda(valor)}<br>
+            <b>Prazo para envio da NF:</b> {prazo_nf}<br>
+            <b>Data prevista de pagamento:</b> {data_pagamento}
+        </p>
+        <p>
+            <b>Dados de acesso:</b><br>
+            E-mail: {email_acesso}<br>
+            Senha: {senha_acesso}
+        </p>
         <p>Acesse o portal:<br><a href="{PORTAL_URL}">{PORTAL_URL}</a></p>
         <p>Atenciosamente,<br>Equipe Zoy</p>
         """
@@ -82,10 +86,12 @@ def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf,
         html = f"""
         <p>Olá, {influenciador}.</p>
         <p>Você possui uma nova ordem de pagamento disponível no Portal Financeiro Zoy para emissão de nota fiscal.</p>
-        <p><b>Campanha:</b> {campanha}<br>
-        <b>Valor:</b> {moeda(valor)}<br>
-        <b>Prazo para envio da NF:</b> {prazo_nf}<br>
-        <b>Data prevista de pagamento:</b> {data_pagamento}</p>
+        <p>
+            <b>Campanha:</b> {campanha}<br>
+            <b>Valor:</b> {moeda(valor)}<br>
+            <b>Prazo para envio da NF:</b> {prazo_nf}<br>
+            <b>Data prevista de pagamento:</b> {data_pagamento}
+        </p>
         <p>Acesse o portal:<br><a href="{PORTAL_URL}">{PORTAL_URL}</a></p>
         <p>Atenciosamente,<br>Equipe Zoy</p>
         """
@@ -140,6 +146,7 @@ def editar_op(row_index, dados):
         dados["campanha"],
         dados["valor"]
     ]])
+
     worksheet.update(f"F{row_index}:K{row_index}", [[
         dados["tomador"],
         dados["cnpj"],
@@ -148,6 +155,7 @@ def editar_op(row_index, dados):
         dados["data_criacao"],
         dados["prazo_nf"]
     ]])
+
     worksheet.update(f"P{row_index}:R{row_index}", [[
         dados["data_pagamento"],
         dados["email"],
@@ -581,17 +589,26 @@ if st.session_state.tipo_usuario == "admin":
         linha_real = index + 2
         badge_text, badge_bg, badge_color, _ = status_config(row["status"])
 
-        st.markdown(f"""
+        valor_formatado = moeda(row["valor"])
+        influenciador = row["influenciador"]
+        campanha = row["campanha"]
+        data_pagamento = row.get("data_pagamento", "")
+        numero_nf = row.get("numero_nf", "")
+        data_envio_nf = row.get("data_envio_nf", "")
+
+        admin_card_html = f"""
         <div class="op-card">
             <span class="badge" style="background:{badge_bg}; color:{badge_color};">{badge_text}</span>
-            <div class="op-value">{moeda(row["valor"])}</div>
-            <div class="op-line"><b>Influenciador:</b> {row["influenciador"]}</div>
-            <div class="op-line"><b>Campanha:</b> {row["campanha"]}</div>
-            <div class="op-line"><b>Pagamento previsto:</b> {row.get("data_pagamento", "")}</div>
-            <div class="op-line"><b>Número NF:</b> {row.get("numero_nf", "")}</div>
-            <div class="small">Data envio NF: {row.get("data_envio_nf", "")}</div>
+            <div class="op-value">{valor_formatado}</div>
+            <div class="op-line"><b>Influenciador:</b> {influenciador}</div>
+            <div class="op-line"><b>Campanha:</b> {campanha}</div>
+            <div class="op-line"><b>Pagamento previsto:</b> {data_pagamento}</div>
+            <div class="op-line"><b>Número NF:</b> {numero_nf}</div>
+            <div class="small">Data envio NF: {data_envio_nf}</div>
         </div>
-        """, unsafe_allow_html=True)
+        """
+
+        st.markdown(admin_card_html, unsafe_allow_html=True)
 
         if row.get("arquivo_nf", ""):
             st.markdown(f"[Abrir NF enviada]({row['arquivo_nf']})")
@@ -702,23 +719,32 @@ for i, pagamento in enumerate(pagamentos):
     badge_text, badge_bg, badge_color, mensagem = status_config(pagamento["status"])
 
     texto_pagamento = ""
-    if pagamento.get("data_pagamento", ""):
-        if pagamento["status"] == "Pago":
-            texto_pagamento = f"<div class='op-line'><b>Pagamento realizado em:</b> {pagamento.get('data_pagamento', '')}</div>"
-        else:
-            texto_pagamento = f"<div class='op-line'><b>Pagamento previsto:</b> {pagamento.get('data_pagamento', '')}</div>"
+    data_pagamento = pagamento.get("data_pagamento", "")
 
-    st.markdown(f"""
+    if data_pagamento:
+        if pagamento["status"] == "Pago":
+            texto_pagamento = f"<div class='op-line'><b>Pagamento realizado em:</b> {data_pagamento}</div>"
+        else:
+            texto_pagamento = f"<div class='op-line'><b>Pagamento previsto:</b> {data_pagamento}</div>"
+
+    valor_formatado = moeda(pagamento["valor"])
+    campanha = pagamento["campanha"]
+    tomador = pagamento["tomador"]
+    data_criacao = pagamento["data_criacao"]
+
+    card_html = f"""
     <div class="op-card">
         <span class="badge" style="background:{badge_bg}; color:{badge_color};">{badge_text}</span>
-        <div class="op-value">{moeda(pagamento["valor"])}</div>
-        <div class="op-line"><b>Campanha:</b> {pagamento["campanha"]}</div>
-        <div class="op-line"><b>Tomador:</b> {pagamento["tomador"]}</div>
+        <div class="op-value">{valor_formatado}</div>
+        <div class="op-line"><b>Campanha:</b> {campanha}</div>
+        <div class="op-line"><b>Tomador:</b> {tomador}</div>
         {texto_pagamento}
-        <div class="small">Criado em {pagamento["data_criacao"]}</div>
+        <div class="small">Criado em {data_criacao}</div>
         <div class="op-line" style="margin-top:12px;"><b>{mensagem}</b></div>
     </div>
-    """, unsafe_allow_html=True)
+    """
+
+    st.markdown(card_html, unsafe_allow_html=True)
 
     with st.expander(f"Ver dados da NF — {pagamento['campanha']}"):
         st.markdown(f"""
