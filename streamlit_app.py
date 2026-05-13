@@ -51,23 +51,13 @@ def upload_pdf_drive(arquivo, campanha, influenciador):
     media = MediaIoBaseUpload(
         io.BytesIO(arquivo.getvalue()),
         mimetype="application/pdf",
-        resumable=True
+        resumable=False
     )
 
     uploaded_file = drive_service.files().create(
         body=file_metadata,
         media_body=media,
         fields="id, webViewLink"
-    ).execute()
-
-    file_id = uploaded_file.get("id")
-
-    drive_service.permissions().create(
-        fileId=file_id,
-        body={
-            "role": "reader",
-            "type": "anyone"
-        }
     ).execute()
 
     return uploaded_file.get("webViewLink")
@@ -237,23 +227,28 @@ for i, pagamento in enumerate(pagamentos):
                 elif not arquivo:
                     st.error("Anexe o PDF da NF antes de enviar.")
                 else:
-                    linha_real = df_filtrado.index[i] + 2
+                    try:
+                        linha_real = df_filtrado.index[i] + 2
 
-                    link_arquivo = upload_pdf_drive(
-                        arquivo,
-                        pagamento["campanha"],
-                        influenciador_selecionado
-                    )
+                        link_arquivo = upload_pdf_drive(
+                            arquivo,
+                            pagamento["campanha"],
+                            influenciador_selecionado
+                        )
 
-                    atualizar_nf(
-                        linha_real,
-                        numero,
-                        valor_nf,
-                        link_arquivo
-                    )
+                        atualizar_nf(
+                            linha_real,
+                            numero,
+                            valor_nf,
+                            link_arquivo
+                        )
 
-                    st.success("NF enviada com sucesso! O arquivo foi salvo no Drive e o status foi atualizado.")
-                    st.rerun()
+                        st.success("NF enviada com sucesso! O arquivo foi salvo no Drive e o status foi atualizado.")
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error("Erro ao enviar a NF. Confirme se a pasta do Drive está compartilhada com a conta de serviço como Editor.")
+                        st.write(str(e))
 
         else:
             st.info("Esta ordem de pagamento não está disponível para envio de NF neste momento.")
