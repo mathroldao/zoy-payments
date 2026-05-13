@@ -3,12 +3,14 @@ import pandas as pd
 
 st.set_page_config(page_title="Zoy Finance", layout="wide")
 
-sheet_id = "1R6TCMWI-cExcAg431-EOjY0DAP6VNJynFUHJpNcMCGU"
-url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+# 🔗 LINK CORRETO DA SUA PLANILHA (CSV)
+url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSnOO6m8TRBKpN4vMJ8hWwy9Jh7J1m3vOYmy60_XU_WgGoXpMrjxVIr8S2Z50d9BLY_t3wqfdp3S-f5/pub?output=csv"
 
+# 📥 LENDO DADOS
 df = pd.read_csv(url)
 pagamentos = df.to_dict(orient="records")
 
+# 💰 FORMATAÇÃO DE MOEDA
 def moeda(valor):
     try:
         valor = float(valor)
@@ -16,10 +18,17 @@ def moeda(valor):
         valor = 0
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+# 📊 CÁLCULOS
 total_recebido = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pago")
-valor_estimado = sum(float(p["valor"]) for p in pagamentos if p["status"] in ["Aguardando Nota Fiscal", "NF Enviada"])
+
+valor_estimado = sum(float(p["valor"]) for p in pagamentos if p["status"] in [
+    "Aguardando Nota Fiscal",
+    "NF Enviada"
+])
+
 aguardando_pagamento = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pagamento Programado")
 
+# 🎨 ESTILO
 st.markdown("""
 <style>
 .card {
@@ -64,9 +73,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# 🧾 TÍTULO
 st.title("Carteira")
 st.write("Gerencie seus recebíveis, acompanhe seu saldo e envie suas notas fiscais.")
 
+# 📊 RESUMO
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -99,7 +110,9 @@ with col3:
 st.markdown("---")
 st.subheader("Extrato")
 
+# 📦 LISTA DE PAGAMENTOS
 for i, pagamento in enumerate(pagamentos):
+
     st.markdown(f"""
     <div class="box">
         <span class="badge">{pagamento["status"]}</span>
@@ -111,6 +124,7 @@ for i, pagamento in enumerate(pagamentos):
     """, unsafe_allow_html=True)
 
     with st.expander(f"Ver dados da NF — {pagamento['campanha']}"):
+
         st.markdown(f"""
         <div class="info-box">
             <p><b>Razão social:</b> {pagamento["tomador"]}</p>
@@ -123,12 +137,15 @@ for i, pagamento in enumerate(pagamentos):
         """, unsafe_allow_html=True)
 
         if pagamento["status"] == "Aguardando Nota Fiscal":
+
             st.markdown("### Enviar Nota Fiscal")
+
             numero = st.text_input("Número da NF", key=f"numero_{i}")
             valor_nf = st.text_input("Valor da NF", value=moeda(pagamento["valor"]), key=f"valor_{i}")
             arquivo = st.file_uploader("Upload da NF (PDF)", type=["pdf"], key=f"arquivo_{i}")
 
             if st.button("Enviar NF", key=f"botao_{i}"):
                 st.success("Nota enviada com sucesso! Agora ela seguirá para análise do financeiro.")
+
         else:
             st.info("Esta ordem de pagamento não está disponível para envio de NF neste momento.")
