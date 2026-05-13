@@ -57,7 +57,8 @@ def upload_pdf_drive(arquivo, campanha, influenciador):
     uploaded_file = drive_service.files().create(
         body=file_metadata,
         media_body=media,
-        fields="id, webViewLink"
+        fields="id, webViewLink",
+        supportsAllDrives=True
     ).execute()
 
     return uploaded_file.get("webViewLink")
@@ -154,9 +155,6 @@ with col3:
 st.markdown("---")
 st.subheader("Extrato")
 
-if len(pagamentos) == 0:
-    st.info("Nenhuma ordem de pagamento encontrada para este influenciador.")
-
 for i, pagamento in enumerate(pagamentos):
 
     status = pagamento["status"]
@@ -247,7 +245,7 @@ for i, pagamento in enumerate(pagamentos):
                         st.rerun()
 
                     except Exception as e:
-                        st.error("Erro ao enviar a NF. Confirme se a pasta do Drive está compartilhada com a conta de serviço como Editor.")
+                        st.error("Erro ao enviar a NF.")
                         st.write(str(e))
 
         else:
