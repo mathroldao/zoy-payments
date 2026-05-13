@@ -4,7 +4,7 @@ import pandas as pd
 st.set_page_config(page_title="Zoy Finance", layout="wide")
 
 sheet_id = "1R6TCMWI-cExcAg431-EOjY0DAP6VNJynFUHJpNcMCGU"
-url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
+url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
 
 df = pd.read_csv(url)
 pagamentos = df.to_dict(orient="records")
