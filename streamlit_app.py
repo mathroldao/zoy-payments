@@ -1,52 +1,25 @@
 import streamlit as st
+import pandas as pd
 
 st.set_page_config(page_title="Zoy Finance", layout="wide")
 
-# DADOS FAKE POR ENQUANTO
-pagamentos = [
-    {
-        "valor": 6000,
-        "status": "Aguardando Nota Fiscal",
-        "tomador": "IEST TECNOLOGIA LTDA",
-        "cnpj": "32.008.487/0001-45",
-        "campanha": "TCL | Bienal de Arquitetura",
-        "data": "20/04/2026",
-        "endereco": "Av. Exemplo, 1000 - São Paulo/SP",
-        "descricao_nf": "Serviço de divulgação publicitária em campanha de marketing de influência.",
-        "prazo": "30/04/2026"
-    },
-    {
-        "valor": 2500,
-        "status": "NF Enviada",
-        "tomador": "ZOY COMUNICACAO LTDA",
-        "cnpj": "00.000.000/0001-00",
-        "campanha": "Sallve | Verão",
-        "data": "25/04/2026",
-        "endereco": "Rua Exemplo, 200 - São Paulo/SP",
-        "descricao_nf": "Serviço de produção de conteúdo digital para campanha publicitária.",
-        "prazo": "05/05/2026"
-    },
-    {
-        "valor": 1200,
-        "status": "Pagamento Programado",
-        "tomador": "CLIENTE EXEMPLO LTDA",
-        "cnpj": "11.111.111/0001-11",
-        "campanha": "Kibon | Palito Premiado",
-        "data": "30/04/2026",
-        "endereco": "Av. Cliente, 500 - São Paulo/SP",
-        "descricao_nf": "Serviço de divulgação em redes sociais.",
-        "prazo": "10/05/2026"
-    }
-]
+sheet_id = "1R6TCMWI-cExcAg431-EOjY0DAP6VNJynFUHJpNcMCGU"
+url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
+
+df = pd.read_csv(url)
+pagamentos = df.to_dict(orient="records")
 
 def moeda(valor):
+    try:
+        valor = float(valor)
+    except:
+        valor = 0
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-total_recebido = sum(p["valor"] for p in pagamentos if p["status"] == "Pago")
-valor_estimado = sum(p["valor"] for p in pagamentos if p["status"] in ["Aguardando Nota Fiscal", "NF Enviada"])
-aguardando_pagamento = sum(p["valor"] for p in pagamentos if p["status"] == "Pagamento Programado")
+total_recebido = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pago")
+valor_estimado = sum(float(p["valor"]) for p in pagamentos if p["status"] in ["Aguardando Nota Fiscal", "NF Enviada"])
+aguardando_pagamento = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pagamento Programado")
 
-# ESTILO
 st.markdown("""
 <style>
 .card {
@@ -94,7 +67,6 @@ st.markdown("""
 st.title("Carteira")
 st.write("Gerencie seus recebíveis, acompanhe seu saldo e envie suas notas fiscais.")
 
-# RESUMO
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -134,7 +106,7 @@ for i, pagamento in enumerate(pagamentos):
         <h3>{moeda(pagamento["valor"])}</h3>
         <p><b>Campanha:</b> {pagamento["campanha"]}</p>
         <p><b>Tomador:</b> {pagamento["tomador"]}</p>
-        <p class="small">Criado em {pagamento["data"]}</p>
+        <p class="small">Criado em {pagamento["data_criacao"]}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -146,7 +118,7 @@ for i, pagamento in enumerate(pagamentos):
             <p><b>Endereço:</b> {pagamento["endereco"]}</p>
             <p><b>Descrição sugerida da NF:</b> {pagamento["descricao_nf"]}</p>
             <p><b>Valor da NF:</b> {moeda(pagamento["valor"])}</p>
-            <p><b>Prazo para envio:</b> {pagamento["prazo"]}</p>
+            <p><b>Prazo para envio:</b> {pagamento["prazo_nf"]}</p>
         </div>
         """, unsafe_allow_html=True)
 
