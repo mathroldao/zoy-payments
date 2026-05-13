@@ -70,21 +70,6 @@ def atualizar_nf(row_index, numero, valor, link_arquivo):
     worksheet.update(f"O{row_index}:O{row_index}", [[datetime.now().strftime("%d/%m/%Y %H:%M")]])
     worksheet.update(f"E{row_index}:E{row_index}", [["NF Enviada"]])
 
-influenciadores = sorted(df["influenciador"].dropna().unique())
-
-st.sidebar.title("Acesso")
-influenciador_selecionado = st.sidebar.selectbox(
-    "Selecione o influenciador",
-    influenciadores
-)
-
-df_filtrado = df[df["influenciador"] == influenciador_selecionado]
-pagamentos = df_filtrado.to_dict(orient="records")
-
-total_recebido = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pago")
-valor_estimado = sum(float(p["valor"]) for p in pagamentos if p["status"] in ["Aguardando Nota Fiscal", "NF Enviada", "NF Reprovada"])
-aguardando_pagamento = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pagamento Programado")
-
 st.markdown("""
 <style>
 .card {
@@ -117,8 +102,77 @@ st.markdown("""
     background-color: #faf5ff;
     margin-bottom: 14px;
 }
+.login-box {
+    max-width: 420px;
+    margin: auto;
+    padding-top: 80px;
+}
 </style>
 """, unsafe_allow_html=True)
+
+# -----------------------------
+# LOGIN
+# -----------------------------
+if "logado" not in st.session_state:
+    st.session_state.logado = False
+
+if "influenciador_logado" not in st.session_state:
+    st.session_state.influenciador_logado = ""
+
+if not st.session_state.logado:
+
+    st.markdown("<div class='login-box'>", unsafe_allow_html=True)
+
+    st.title("Portal Financeiro Zoy")
+    st.write("Acesse sua carteira para visualizar pagamentos e enviar notas fiscais.")
+
+    email_digitado = st.text_input("E-mail")
+    senha_digitada = st.text_input("Senha", type="password")
+
+    if st.button("Entrar"):
+
+        usuario = df[
+            (df["email"].astype(str).str.strip().str.lower() == email_digitado.strip().lower()) &
+            (df["senha"].astype(str).str.strip() == senha_digitada.strip())
+        ]
+
+        if len(usuario) > 0:
+            st.session_state.logado = True
+            st.session_state.influenciador_logado = usuario.iloc[0]["influenciador"]
+            st.rerun()
+        else:
+            st.error("E-mail ou senha inválidos.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()
+
+# -----------------------------
+# ÁREA LOGADA
+# -----------------------------
+influenciador_selecionado = st.session_state.influenciador_logado
+
+with st.sidebar:
+    st.title("Acesso")
+    st.write(f"Logado como:")
+    st.write(f"**{influenciador_selecionado}**")
+
+    if st.button("Sair"):
+        st.session_state.logado = False
+        st.session_state.influenciador_logado = ""
+        st.rerun()
+
+df_filtrado = df[df["influenciador"] == influenciador_selecionado]
+pagamentos = df_filtrado.to_dict(orient="records")
+
+total_recebido = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pago")
+
+valor_estimado = sum(float(p["valor"]) for p in pagamentos if p["status"] in [
+    "Aguardando Nota Fiscal",
+    "NF Enviada",
+    "NF Reprovada"
+])
+
+aguardando_pagamento = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pagamento Programado")
 
 st.title("Carteira")
 st.write(f"Olá, **{influenciador_selecionado}**. Gerencie seus recebíveis, acompanhe seu saldo e envie suas notas fiscais.")
@@ -154,6 +208,9 @@ with col3:
 
 st.markdown("---")
 st.subheader("Extrato")
+
+if len(pagamentos) == 0:
+    st.info("Nenhuma ordem de pagamento encontrada para este influenciador.")
 
 for i, pagamento in enumerate(pagamentos):
 
