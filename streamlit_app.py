@@ -11,7 +11,7 @@ st.set_page_config(page_title="Zoy Finance", layout="wide")
 
 SPREADSHEET_ID = "1R6TCMWI-cExcAg431-EOjY0DAP6VNJynFUHJpNcMCGU"
 WORKSHEET_NAME = "pagamentos"
-DRIVE_FOLDER_ID = "1iPgXfwhOfg4xOh7s7XzaXTkBp07FlOQ3"
+DRIVE_FOLDER_ID = "1YIOoOAMcjJq43MdiMjukVtW-AlCIQ8Jm"
 
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
