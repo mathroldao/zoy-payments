@@ -2,7 +2,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Zoy Finance", layout="wide")
 
-# --- DADOS FAKE POR ENQUANTO ---
+# DADOS FAKE POR ENQUANTO
 pagamentos = [
     {
         "valor": 6000,
@@ -10,7 +10,10 @@ pagamentos = [
         "tomador": "IEST TECNOLOGIA LTDA",
         "cnpj": "32.008.487/0001-45",
         "campanha": "TCL | Bienal de Arquitetura",
-        "data": "20/04/2026"
+        "data": "20/04/2026",
+        "endereco": "Av. Exemplo, 1000 - São Paulo/SP",
+        "descricao_nf": "Serviço de divulgação publicitária em campanha de marketing de influência.",
+        "prazo": "30/04/2026"
     },
     {
         "valor": 2500,
@@ -18,7 +21,10 @@ pagamentos = [
         "tomador": "ZOY COMUNICACAO LTDA",
         "cnpj": "00.000.000/0001-00",
         "campanha": "Sallve | Verão",
-        "data": "25/04/2026"
+        "data": "25/04/2026",
+        "endereco": "Rua Exemplo, 200 - São Paulo/SP",
+        "descricao_nf": "Serviço de produção de conteúdo digital para campanha publicitária.",
+        "prazo": "05/05/2026"
     },
     {
         "valor": 1200,
@@ -26,7 +32,10 @@ pagamentos = [
         "tomador": "CLIENTE EXEMPLO LTDA",
         "cnpj": "11.111.111/0001-11",
         "campanha": "Kibon | Palito Premiado",
-        "data": "30/04/2026"
+        "data": "30/04/2026",
+        "endereco": "Av. Cliente, 500 - São Paulo/SP",
+        "descricao_nf": "Serviço de divulgação em redes sociais.",
+        "prazo": "10/05/2026"
     }
 ]
 
@@ -37,7 +46,7 @@ total_recebido = sum(p["valor"] for p in pagamentos if p["status"] == "Pago")
 valor_estimado = sum(p["valor"] for p in pagamentos if p["status"] in ["Aguardando Nota Fiscal", "NF Enviada"])
 aguardando_pagamento = sum(p["valor"] for p in pagamentos if p["status"] == "Pagamento Programado")
 
-# --- ESTILO ---
+# ESTILO
 st.markdown("""
 <style>
 .card {
@@ -73,13 +82,19 @@ st.markdown("""
     color: #777;
     font-size: 14px;
 }
+.info-box {
+    padding: 16px;
+    border-radius: 12px;
+    background-color: #faf5ff;
+    margin-bottom: 14px;
+}
 </style>
 """, unsafe_allow_html=True)
 
 st.title("Carteira")
 st.write("Gerencie seus recebíveis, acompanhe seu saldo e envie suas notas fiscais.")
 
-# --- RESUMO ---
+# RESUMO
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -110,29 +125,38 @@ with col3:
     """, unsafe_allow_html=True)
 
 st.markdown("---")
-
-# --- EXTRATO ---
 st.subheader("Extrato")
 
-for pagamento in pagamentos:
+for i, pagamento in enumerate(pagamentos):
     st.markdown(f"""
     <div class="box">
         <span class="badge">{pagamento["status"]}</span>
         <h3>{moeda(pagamento["valor"])}</h3>
-        <p><b>Tomador:</b> {pagamento["tomador"]} ({pagamento["cnpj"]})</p>
         <p><b>Campanha:</b> {pagamento["campanha"]}</p>
+        <p><b>Tomador:</b> {pagamento["tomador"]}</p>
         <p class="small">Criado em {pagamento["data"]}</p>
     </div>
     """, unsafe_allow_html=True)
 
-st.markdown("### Enviar Nota Fiscal")
+    with st.expander(f"Ver dados da NF — {pagamento['campanha']}"):
+        st.markdown(f"""
+        <div class="info-box">
+            <p><b>Razão social:</b> {pagamento["tomador"]}</p>
+            <p><b>CNPJ:</b> {pagamento["cnpj"]}</p>
+            <p><b>Endereço:</b> {pagamento["endereco"]}</p>
+            <p><b>Descrição sugerida da NF:</b> {pagamento["descricao_nf"]}</p>
+            <p><b>Valor da NF:</b> {moeda(pagamento["valor"])}</p>
+            <p><b>Prazo para envio:</b> {pagamento["prazo"]}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-campanhas = [p["campanha"] for p in pagamentos if p["status"] == "Aguardando Nota Fiscal"]
-campanha_selecionada = st.selectbox("Selecione a campanha", campanhas)
+        if pagamento["status"] == "Aguardando Nota Fiscal":
+            st.markdown("### Enviar Nota Fiscal")
+            numero = st.text_input("Número da NF", key=f"numero_{i}")
+            valor_nf = st.text_input("Valor da NF", value=moeda(pagamento["valor"]), key=f"valor_{i}")
+            arquivo = st.file_uploader("Upload da NF (PDF)", type=["pdf"], key=f"arquivo_{i}")
 
-numero = st.text_input("Número da NF")
-valor_nf = st.text_input("Valor da NF")
-arquivo = st.file_uploader("Upload da NF (PDF)", type=["pdf"])
-
-if st.button("Enviar NF"):
-    st.success(f"Nota da campanha {campanha_selecionada} enviada com sucesso!")
+            if st.button("Enviar NF", key=f"botao_{i}"):
+                st.success("Nota enviada com sucesso! Agora ela seguirá para análise do financeiro.")
+        else:
+            st.info("Esta ordem de pagamento não está disponível para envio de NF neste momento.")
