@@ -61,7 +61,7 @@ def status_config(status):
     return config.get(status, (status, "#F3F4F6", "#374151", ""))
 
 
-def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf, email_acesso, senha_acesso, novo_influenciador):
+def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf, data_pagamento, email_acesso, senha_acesso, novo_influenciador):
     if novo_influenciador:
         assunto = "Seu acesso ao Portal Financeiro Zoy foi criado"
         html = f"""
@@ -69,7 +69,8 @@ def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf,
         <p>Seu acesso ao Portal Financeiro Zoy foi criado e você possui uma nova ordem de pagamento disponível para emissão de nota fiscal.</p>
         <p><b>Campanha:</b> {campanha}<br>
         <b>Valor:</b> {moeda(valor)}<br>
-        <b>Prazo para envio da NF:</b> {prazo_nf}</p>
+        <b>Prazo para envio da NF:</b> {prazo_nf}<br>
+        <b>Data prevista de pagamento:</b> {data_pagamento}</p>
         <p><b>Dados de acesso:</b><br>
         E-mail: {email_acesso}<br>
         Senha: {senha_acesso}</p>
@@ -83,7 +84,8 @@ def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf,
         <p>Você possui uma nova ordem de pagamento disponível no Portal Financeiro Zoy para emissão de nota fiscal.</p>
         <p><b>Campanha:</b> {campanha}<br>
         <b>Valor:</b> {moeda(valor)}<br>
-        <b>Prazo para envio da NF:</b> {prazo_nf}</p>
+        <b>Prazo para envio da NF:</b> {prazo_nf}<br>
+        <b>Data prevista de pagamento:</b> {data_pagamento}</p>
         <p>Acesse o portal:<br><a href="{PORTAL_URL}">{PORTAL_URL}</a></p>
         <p>Atenciosamente,<br>Equipe Zoy</p>
         """
@@ -146,7 +148,8 @@ def editar_op(row_index, dados):
         dados["data_criacao"],
         dados["prazo_nf"]
     ]])
-    worksheet.update(f"P{row_index}:Q{row_index}", [[
+    worksheet.update(f"P{row_index}:R{row_index}", [[
+        dados["data_pagamento"],
         dados["email"],
         dados["senha"]
     ]])
@@ -468,6 +471,7 @@ if st.session_state.tipo_usuario == "admin":
         campanha_op = st.text_input("Campanha")
         valor_op = st.number_input("Valor da OP", min_value=0.0, step=100.0)
         prazo_nf_op = st.text_input("Prazo para envio da NF", placeholder="Ex: 30/05/2026")
+        data_pagamento_op = st.text_input("Data prevista de pagamento", placeholder="Ex: 30/06/2026")
 
         st.markdown("### Dados para emissão da NF")
         tomador_op = st.text_input("Tomador / Razão Social")
@@ -502,6 +506,7 @@ if st.session_state.tipo_usuario == "admin":
                     "",
                     "",
                     "",
+                    data_pagamento_op,
                     email_op,
                     senha_op
                 ]
@@ -515,6 +520,7 @@ if st.session_state.tipo_usuario == "admin":
                         campanha=campanha_op,
                         valor=valor_op,
                         prazo_nf=prazo_nf_op,
+                        data_pagamento=data_pagamento_op,
                         email_acesso=email_op,
                         senha_acesso=senha_op,
                         novo_influenciador=(tipo_influenciador == "Cadastrar novo influenciador")
@@ -581,6 +587,7 @@ if st.session_state.tipo_usuario == "admin":
             <div class="op-value">{moeda(row["valor"])}</div>
             <div class="op-line"><b>Influenciador:</b> {row["influenciador"]}</div>
             <div class="op-line"><b>Campanha:</b> {row["campanha"]}</div>
+            <div class="op-line"><b>Pagamento previsto:</b> {row.get("data_pagamento", "")}</div>
             <div class="op-line"><b>Número NF:</b> {row.get("numero_nf", "")}</div>
             <div class="small">Data envio NF: {row.get("data_envio_nf", "")}</div>
         </div>
@@ -625,6 +632,7 @@ if st.session_state.tipo_usuario == "admin":
             edit_descricao = st.text_area("Descrição NF", value=str(row["descricao_nf"]), key=f"edit_desc_{index}")
             edit_data = st.text_input("Data de criação", value=str(row["data_criacao"]), key=f"edit_data_{index}")
             edit_prazo = st.text_input("Prazo NF", value=str(row["prazo_nf"]), key=f"edit_prazo_{index}")
+            edit_data_pagamento = st.text_input("Data prevista de pagamento", value=str(row.get("data_pagamento", "")), key=f"edit_data_pagamento_{index}")
             edit_email = st.text_input("E-mail", value=str(row["email"]), key=f"edit_email_{index}")
             edit_senha = st.text_input("Senha", value=str(row["senha"]), key=f"edit_senha_{index}")
 
@@ -639,6 +647,7 @@ if st.session_state.tipo_usuario == "admin":
                     "descricao_nf": edit_descricao,
                     "data_criacao": edit_data,
                     "prazo_nf": edit_prazo,
+                    "data_pagamento": edit_data_pagamento,
                     "email": edit_email,
                     "senha": edit_senha
                 })
@@ -692,12 +701,20 @@ if len(pagamentos) == 0:
 for i, pagamento in enumerate(pagamentos):
     badge_text, badge_bg, badge_color, mensagem = status_config(pagamento["status"])
 
+    texto_pagamento = ""
+    if pagamento.get("data_pagamento", ""):
+        if pagamento["status"] == "Pago":
+            texto_pagamento = f"<div class='op-line'><b>Pagamento realizado em:</b> {pagamento.get('data_pagamento', '')}</div>"
+        else:
+            texto_pagamento = f"<div class='op-line'><b>Pagamento previsto:</b> {pagamento.get('data_pagamento', '')}</div>"
+
     st.markdown(f"""
     <div class="op-card">
         <span class="badge" style="background:{badge_bg}; color:{badge_color};">{badge_text}</span>
         <div class="op-value">{moeda(pagamento["valor"])}</div>
         <div class="op-line"><b>Campanha:</b> {pagamento["campanha"]}</div>
         <div class="op-line"><b>Tomador:</b> {pagamento["tomador"]}</div>
+        {texto_pagamento}
         <div class="small">Criado em {pagamento["data_criacao"]}</div>
         <div class="op-line" style="margin-top:12px;"><b>{mensagem}</b></div>
     </div>
@@ -712,6 +729,7 @@ for i, pagamento in enumerate(pagamentos):
             <p><b>Descrição sugerida da NF:</b> {pagamento["descricao_nf"]}</p>
             <p><b>Valor da NF:</b> {moeda(pagamento["valor"])}</p>
             <p><b>Prazo para envio:</b> {pagamento["prazo_nf"]}</p>
+            <p><b>Data prevista de pagamento:</b> {pagamento.get("data_pagamento", "")}</p>
         </div>
         """, unsafe_allow_html=True)
 
