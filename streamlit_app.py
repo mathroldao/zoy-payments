@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import gspread
+import resend
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -35,12 +36,65 @@ df = pd.DataFrame(data).fillna("")
 if len(df) > 0:
     df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
 
+resend.api_key = st.secrets["resend"]["api_key"]
+FROM_EMAIL = st.secrets["resend"]["from_email"]
+
+
 def moeda(valor):
     try:
         valor = float(valor)
     except:
         valor = 0
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf, email_acesso, senha_acesso, novo_influenciador):
+    portal_url = "https://zoy-payments.streamlit.app"
+
+    if novo_influenciador:
+        assunto = "Seu acesso ao Portal Financeiro Zoy foi criado"
+        html = f"""
+        <p>Olá, {influenciador}.</p>
+
+        <p>Seu acesso ao Portal Financeiro Zoy foi criado e você possui uma nova ordem de pagamento disponível para emissão de nota fiscal.</p>
+
+        <p><b>Campanha:</b> {campanha}<br>
+        <b>Valor:</b> {moeda(valor)}<br>
+        <b>Prazo para envio da NF:</b> {prazo_nf}</p>
+
+        <p><b>Dados de acesso:</b><br>
+        E-mail: {email_acesso}<br>
+        Senha: {senha_acesso}</p>
+
+        <p>Acesse o portal pelo link abaixo:</p>
+        <p><a href="{portal_url}">{portal_url}</a></p>
+
+        <p>Atenciosamente,<br>Equipe Zoy</p>
+        """
+    else:
+        assunto = "Nova ordem de pagamento disponível no Portal Financeiro Zoy"
+        html = f"""
+        <p>Olá, {influenciador}.</p>
+
+        <p>Você possui uma nova ordem de pagamento disponível no Portal Financeiro Zoy para emissão de nota fiscal.</p>
+
+        <p><b>Campanha:</b> {campanha}<br>
+        <b>Valor:</b> {moeda(valor)}<br>
+        <b>Prazo para envio da NF:</b> {prazo_nf}</p>
+
+        <p>Acesse o portal pelo link abaixo:</p>
+        <p><a href="{portal_url}">{portal_url}</a></p>
+
+        <p>Atenciosamente,<br>Equipe Zoy</p>
+        """
+
+    resend.Emails.send({
+        "from": FROM_EMAIL,
+        "to": [destinatario],
+        "subject": assunto,
+        "html": html,
+    })
+
 
 def upload_pdf_drive(arquivo, campanha, influenciador):
     file_name = f"NF - {influenciador} - {campanha} - {arquivo.name}"
@@ -65,6 +119,7 @@ def upload_pdf_drive(arquivo, campanha, influenciador):
 
     return uploaded_file.get("webViewLink")
 
+
 def atualizar_nf(row_index, numero, valor, link_arquivo):
     worksheet.update(f"L{row_index}:L{row_index}", [[numero]])
     worksheet.update(f"M{row_index}:M{row_index}", [[valor]])
@@ -72,11 +127,14 @@ def atualizar_nf(row_index, numero, valor, link_arquivo):
     worksheet.update(f"O{row_index}:O{row_index}", [[datetime.now().strftime("%d/%m/%Y %H:%M")]])
     worksheet.update(f"E{row_index}:E{row_index}", [["NF Enviada"]])
 
+
 def atualizar_status(row_index, novo_status):
     worksheet.update(f"E{row_index}:E{row_index}", [[novo_status]])
 
+
 def criar_op(nova_linha):
     worksheet.append_row(nova_linha, value_input_option="USER_ENTERED")
+
 
 def proximo_id():
     if len(df) == 0:
@@ -85,6 +143,7 @@ def proximo_id():
         return int(pd.to_numeric(df["id"], errors="coerce").max()) + 1
     except:
         return len(df) + 1
+
 
 st.markdown("""
 <style>
@@ -126,7 +185,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# LOGIN
+
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
@@ -135,6 +194,7 @@ if "tipo_usuario" not in st.session_state:
 
 if "influenciador_logado" not in st.session_state:
     st.session_state.influenciador_logado = ""
+
 
 if not st.session_state.logado:
 
@@ -173,7 +233,7 @@ if not st.session_state.logado:
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# SIDEBAR
+
 with st.sidebar:
     st.title("Acesso")
 
@@ -190,7 +250,7 @@ with st.sidebar:
         st.session_state.influenciador_logado = ""
         st.rerun()
 
-# ADMIN
+
 if st.session_state.tipo_usuario == "admin":
 
     st.title("Painel Financeiro Zoy")
@@ -245,6 +305,8 @@ if st.session_state.tipo_usuario == "admin":
                 st.error("Preencha os campos obrigatórios: influenciador, campanha, valor, tomador e CNPJ.")
             elif tipo_influenciador == "Cadastrar novo influenciador" and (not email_op or not senha_op):
                 st.error("Para novo influenciador, preencha e-mail e senha.")
+            elif not email_op:
+                st.error("Este influenciador não possui e-mail cadastrado.")
             else:
                 nova_linha = [
                     proximo_id(),
@@ -268,7 +330,23 @@ if st.session_state.tipo_usuario == "admin":
 
                 criar_op(nova_linha)
 
-                st.success("OP criada com sucesso! Ela já aparecerá para o influenciador.")
+                try:
+                    enviar_email_nova_op(
+                        destinatario=email_op,
+                        influenciador=influenciador_op,
+                        campanha=campanha_op,
+                        valor=valor_op,
+                        prazo_nf=prazo_nf_op,
+                        email_acesso=email_op,
+                        senha_acesso=senha_op,
+                        novo_influenciador=(tipo_influenciador == "Cadastrar novo influenciador")
+                    )
+
+                    st.success("OP criada com sucesso! O influenciador foi notificado por e-mail.")
+                except Exception as e:
+                    st.warning("OP criada com sucesso, mas o e-mail não foi enviado.")
+                    st.write(str(e))
+
                 st.rerun()
 
     st.markdown("---")
@@ -372,20 +450,14 @@ if st.session_state.tipo_usuario == "admin":
 
     st.stop()
 
-# INFLUENCIADOR
+
 influenciador_selecionado = st.session_state.influenciador_logado
 
 df_filtrado = df[df["influenciador"] == influenciador_selecionado]
 pagamentos = df_filtrado.to_dict(orient="records")
 
 total_recebido = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pago")
-
-valor_estimado = sum(float(p["valor"]) for p in pagamentos if p["status"] in [
-    "Aguardando Nota Fiscal",
-    "NF Enviada",
-    "NF Reprovada"
-])
-
+valor_estimado = sum(float(p["valor"]) for p in pagamentos if p["status"] in ["Aguardando Nota Fiscal", "NF Enviada", "NF Reprovada"])
 aguardando_pagamento = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pagamento Programado")
 
 st.title("Carteira")
