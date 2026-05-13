@@ -31,7 +31,9 @@ worksheet = sheet.worksheet(WORKSHEET_NAME)
 
 data = worksheet.get_all_records()
 df = pd.DataFrame(data).fillna("")
-df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
+
+if len(df) > 0:
+    df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
 
 def moeda(valor):
     try:
@@ -73,6 +75,17 @@ def atualizar_nf(row_index, numero, valor, link_arquivo):
 def atualizar_status(row_index, novo_status):
     worksheet.update(f"E{row_index}:E{row_index}", [[novo_status]])
 
+def criar_op(nova_linha):
+    worksheet.append_row(nova_linha, value_input_option="USER_ENTERED")
+
+def proximo_id():
+    if len(df) == 0:
+        return 1
+    try:
+        return int(pd.to_numeric(df["id"], errors="coerce").max()) + 1
+    except:
+        return len(df) + 1
+
 st.markdown("""
 <style>
 .card {
@@ -113,9 +126,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------
 # LOGIN
-# -----------------------------
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
@@ -162,9 +173,7 @@ if not st.session_state.logado:
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# -----------------------------
 # SIDEBAR
-# -----------------------------
 with st.sidebar:
     st.title("Acesso")
 
@@ -181,13 +190,88 @@ with st.sidebar:
         st.session_state.influenciador_logado = ""
         st.rerun()
 
-# -----------------------------
-# PAINEL ADMIN
-# -----------------------------
+# ADMIN
 if st.session_state.tipo_usuario == "admin":
 
     st.title("Painel Financeiro Zoy")
-    st.write("Acompanhe as ordens de pagamento, notas fiscais enviadas e status de pagamento.")
+    st.write("Crie novas ordens de pagamento, acompanhe NFs e atualize status financeiros.")
+
+    with st.expander("+ Nova Ordem de Pagamento", expanded=False):
+
+        tipo_influenciador = st.radio(
+            "Influenciador",
+            ["Selecionar existente", "Cadastrar novo influenciador"],
+            horizontal=True
+        )
+
+        influenciadores_existentes = sorted(df["influenciador"].dropna().unique()) if len(df) > 0 else []
+
+        if tipo_influenciador == "Selecionar existente":
+            influenciador_op = st.selectbox("Selecione o influenciador", influenciadores_existentes)
+
+            dados_usuario = df[df["influenciador"] == influenciador_op].head(1)
+
+            if len(dados_usuario) > 0:
+                email_op = dados_usuario.iloc[0]["email"]
+                senha_op = dados_usuario.iloc[0]["senha"]
+            else:
+                email_op = ""
+                senha_op = ""
+
+        else:
+            influenciador_op = st.text_input("Nome/@ do influenciador")
+            email_op = st.text_input("E-mail de acesso")
+            senha_op = st.text_input("Senha de acesso")
+
+        st.markdown("### Dados da campanha")
+
+        campanha_op = st.text_input("Campanha")
+        valor_op = st.number_input("Valor da OP", min_value=0.0, step=100.0)
+        prazo_nf_op = st.text_input("Prazo para envio da NF", placeholder="Ex: 30/05/2026")
+
+        st.markdown("### Dados para emissão da NF")
+
+        tomador_op = st.text_input("Tomador / Razão Social")
+        cnpj_op = st.text_input("CNPJ")
+        endereco_op = st.text_input("Endereço")
+        descricao_nf_op = st.text_area(
+            "Descrição sugerida da NF",
+            value="Serviço de divulgação publicitária em campanha de marketing de influência."
+        )
+
+        if st.button("Criar OP"):
+
+            if not influenciador_op or not campanha_op or valor_op <= 0 or not tomador_op or not cnpj_op:
+                st.error("Preencha os campos obrigatórios: influenciador, campanha, valor, tomador e CNPJ.")
+            elif tipo_influenciador == "Cadastrar novo influenciador" and (not email_op or not senha_op):
+                st.error("Para novo influenciador, preencha e-mail e senha.")
+            else:
+                nova_linha = [
+                    proximo_id(),
+                    influenciador_op,
+                    campanha_op,
+                    valor_op,
+                    "Aguardando Nota Fiscal",
+                    tomador_op,
+                    cnpj_op,
+                    endereco_op,
+                    descricao_nf_op,
+                    datetime.now().strftime("%d/%m/%Y"),
+                    prazo_nf_op,
+                    "",
+                    "",
+                    "",
+                    "",
+                    email_op,
+                    senha_op
+                ]
+
+                criar_op(nova_linha)
+
+                st.success("OP criada com sucesso! Ela já aparecerá para o influenciador.")
+                st.rerun()
+
+    st.markdown("---")
 
     total_op = df["valor"].sum()
     total_nf_enviada = df[df["status"] == "NF Enviada"]["valor"].sum()
@@ -288,9 +372,7 @@ if st.session_state.tipo_usuario == "admin":
 
     st.stop()
 
-# -----------------------------
-# PORTAL INFLUENCIADOR
-# -----------------------------
+# INFLUENCIADOR
 influenciador_selecionado = st.session_state.influenciador_logado
 
 df_filtrado = df[df["influenciador"] == influenciador_selecionado]
