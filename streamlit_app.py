@@ -2,13 +2,17 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 from datetime import datetime
+import io
 
 st.set_page_config(page_title="Zoy Finance", layout="wide")
 
-# -----------------------------
-# CONECTAR GOOGLE SHEETS
-# -----------------------------
+SPREADSHEET_ID = "1R6TCMWI-cExcAg431-EOjY0DAP6VNJynFUHJpNcMCGU"
+WORKSHEET_NAME = "pagamentos"
+DRIVE_FOLDER_ID = "1iPgXfwhOfg4xOh7s7XzaXTkBp07FlOQ3"
+
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
@@ -20,19 +24,61 @@ creds = Credentials.from_service_account_info(
 )
 
 client = gspread.authorize(creds)
+drive_service = build("drive", "v3", credentials=creds)
 
-sheet = client.open_by_key("1R6TCMWI-cExcAg431-EOjY0DAP6VNJynFUHJpNcMCGU")
-worksheet = sheet.worksheet("pagamentos")
+sheet = client.open_by_key(SPREADSHEET_ID)
+worksheet = sheet.worksheet(WORKSHEET_NAME)
 
 data = worksheet.get_all_records()
-df = pd.DataFrame(data)
-
-df = df.fillna("")
+df = pd.DataFrame(data).fillna("")
 df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
 
-# -----------------------------
-# FILTRO POR INFLUENCIADOR
-# -----------------------------
+def moeda(valor):
+    try:
+        valor = float(valor)
+    except:
+        valor = 0
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def upload_pdf_drive(arquivo, campanha, influenciador):
+    file_name = f"NF - {influenciador} - {campanha} - {arquivo.name}"
+
+    file_metadata = {
+        "name": file_name,
+        "parents": [DRIVE_FOLDER_ID]
+    }
+
+    media = MediaIoBaseUpload(
+        io.BytesIO(arquivo.getvalue()),
+        mimetype="application/pdf",
+        resumable=True
+    )
+
+    uploaded_file = drive_service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields="id, webViewLink"
+    ).execute()
+
+    file_id = uploaded_file.get("id")
+
+    drive_service.permissions().create(
+        fileId=file_id,
+        body={
+            "role": "reader",
+            "type": "anyone"
+        }
+    ).execute()
+
+    return uploaded_file.get("webViewLink")
+
+def atualizar_nf(row_index, numero, valor, link_arquivo):
+    worksheet.update(f"L{row_index}:L{row_index}", [[numero]])
+    worksheet.update(f"M{row_index}:M{row_index}", [[valor]])
+    worksheet.update(f"N{row_index}:N{row_index}", [[link_arquivo]])
+    worksheet.update(f"O{row_index}:O{row_index}", [[datetime.now().strftime("%d/%m/%Y %H:%M")]])
+    worksheet.update(f"E{row_index}:E{row_index}", [["NF Enviada"]])
+
 influenciadores = sorted(df["influenciador"].dropna().unique())
 
 st.sidebar.title("Acesso")
@@ -44,39 +90,10 @@ influenciador_selecionado = st.sidebar.selectbox(
 df_filtrado = df[df["influenciador"] == influenciador_selecionado]
 pagamentos = df_filtrado.to_dict(orient="records")
 
-# -----------------------------
-# FUNÇÕES
-# -----------------------------
-def moeda(valor):
-    try:
-        valor = float(valor)
-    except:
-        valor = 0
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-def atualizar_nf(row_index, numero, valor, arquivo_nome):
-    worksheet.update(f"L{row_index}:L{row_index}", [[numero]])
-    worksheet.update(f"M{row_index}:M{row_index}", [[valor]])
-    worksheet.update(f"N{row_index}:N{row_index}", [[arquivo_nome]])
-    worksheet.update(f"O{row_index}:O{row_index}", [[datetime.now().strftime("%d/%m/%Y %H:%M")]])
-    worksheet.update(f"E{row_index}:E{row_index}", [["NF Enviada"]])
-
-# -----------------------------
-# CÁLCULOS
-# -----------------------------
 total_recebido = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pago")
-
-valor_estimado = sum(float(p["valor"]) for p in pagamentos if p["status"] in [
-    "Aguardando Nota Fiscal",
-    "NF Enviada",
-    "NF Reprovada"
-])
-
+valor_estimado = sum(float(p["valor"]) for p in pagamentos if p["status"] in ["Aguardando Nota Fiscal", "NF Enviada", "NF Reprovada"])
 aguardando_pagamento = sum(float(p["valor"]) for p in pagamentos if p["status"] == "Pagamento Programado")
 
-# -----------------------------
-# ESTILO
-# -----------------------------
 st.markdown("""
 <style>
 .card {
@@ -112,9 +129,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------
-# TELA
-# -----------------------------
 st.title("Carteira")
 st.write(f"Olá, **{influenciador_selecionado}**. Gerencie seus recebíveis, acompanhe seu saldo e envie suas notas fiscais.")
 
@@ -208,7 +222,7 @@ for i, pagamento in enumerate(pagamentos):
         </div>
         """, unsafe_allow_html=True)
 
-        if pagamento["status"] in ["Aguardando Nota Fiscal", "NF Reprovada"]:
+        if status in ["Aguardando Nota Fiscal", "NF Reprovada"]:
 
             st.markdown("### Enviar Nota Fiscal")
 
@@ -225,14 +239,20 @@ for i, pagamento in enumerate(pagamentos):
                 else:
                     linha_real = df_filtrado.index[i] + 2
 
+                    link_arquivo = upload_pdf_drive(
+                        arquivo,
+                        pagamento["campanha"],
+                        influenciador_selecionado
+                    )
+
                     atualizar_nf(
                         linha_real,
                         numero,
                         valor_nf,
-                        arquivo.name
+                        link_arquivo
                     )
 
-                    st.success("NF enviada com sucesso! O status foi atualizado para NF Enviada.")
+                    st.success("NF enviada com sucesso! O arquivo foi salvo no Drive e o status foi atualizado.")
                     st.rerun()
 
         else:
