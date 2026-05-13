@@ -39,14 +39,12 @@ if len(df) > 0:
 resend.api_key = st.secrets["resend"]["api_key"]
 FROM_EMAIL = st.secrets["resend"]["from_email"]
 
-
 def moeda(valor):
     try:
         valor = float(valor)
     except:
         valor = 0
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
 
 def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf, email_acesso, senha_acesso, novo_influenciador):
     portal_url = "https://zoy-payments.streamlit.app"
@@ -55,36 +53,25 @@ def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf,
         assunto = "Seu acesso ao Portal Financeiro Zoy foi criado"
         html = f"""
         <p>Olá, {influenciador}.</p>
-
         <p>Seu acesso ao Portal Financeiro Zoy foi criado e você possui uma nova ordem de pagamento disponível para emissão de nota fiscal.</p>
-
         <p><b>Campanha:</b> {campanha}<br>
         <b>Valor:</b> {moeda(valor)}<br>
         <b>Prazo para envio da NF:</b> {prazo_nf}</p>
-
         <p><b>Dados de acesso:</b><br>
         E-mail: {email_acesso}<br>
         Senha: {senha_acesso}</p>
-
-        <p>Acesse o portal pelo link abaixo:</p>
-        <p><a href="{portal_url}">{portal_url}</a></p>
-
+        <p>Acesse o portal:<br><a href="{portal_url}">{portal_url}</a></p>
         <p>Atenciosamente,<br>Equipe Zoy</p>
         """
     else:
         assunto = "Nova ordem de pagamento disponível no Portal Financeiro Zoy"
         html = f"""
         <p>Olá, {influenciador}.</p>
-
         <p>Você possui uma nova ordem de pagamento disponível no Portal Financeiro Zoy para emissão de nota fiscal.</p>
-
         <p><b>Campanha:</b> {campanha}<br>
         <b>Valor:</b> {moeda(valor)}<br>
         <b>Prazo para envio da NF:</b> {prazo_nf}</p>
-
-        <p>Acesse o portal pelo link abaixo:</p>
-        <p><a href="{portal_url}">{portal_url}</a></p>
-
+        <p>Acesse o portal:<br><a href="{portal_url}">{portal_url}</a></p>
         <p>Atenciosamente,<br>Equipe Zoy</p>
         """
 
@@ -94,7 +81,6 @@ def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf,
         "subject": assunto,
         "html": html,
     })
-
 
 def upload_pdf_drive(arquivo, campanha, influenciador):
     file_name = f"NF - {influenciador} - {campanha} - {arquivo.name}"
@@ -119,7 +105,6 @@ def upload_pdf_drive(arquivo, campanha, influenciador):
 
     return uploaded_file.get("webViewLink")
 
-
 def atualizar_nf(row_index, numero, valor, link_arquivo):
     worksheet.update(f"L{row_index}:L{row_index}", [[numero]])
     worksheet.update(f"M{row_index}:M{row_index}", [[valor]])
@@ -127,14 +112,33 @@ def atualizar_nf(row_index, numero, valor, link_arquivo):
     worksheet.update(f"O{row_index}:O{row_index}", [[datetime.now().strftime("%d/%m/%Y %H:%M")]])
     worksheet.update(f"E{row_index}:E{row_index}", [["NF Enviada"]])
 
-
 def atualizar_status(row_index, novo_status):
     worksheet.update(f"E{row_index}:E{row_index}", [[novo_status]])
 
+def editar_op(row_index, dados):
+    worksheet.update(f"B{row_index}:D{row_index}", [[
+        dados["influenciador"],
+        dados["campanha"],
+        dados["valor"]
+    ]])
+    worksheet.update(f"F{row_index}:K{row_index}", [[
+        dados["tomador"],
+        dados["cnpj"],
+        dados["endereco"],
+        dados["descricao_nf"],
+        dados["data_criacao"],
+        dados["prazo_nf"]
+    ]])
+    worksheet.update(f"P{row_index}:Q{row_index}", [[
+        dados["email"],
+        dados["senha"]
+    ]])
+
+def excluir_op(row_index):
+    worksheet.delete_rows(row_index)
 
 def criar_op(nova_linha):
     worksheet.append_row(nova_linha, value_input_option="USER_ENTERED")
-
 
 def proximo_id():
     if len(df) == 0:
@@ -143,7 +147,6 @@ def proximo_id():
         return int(pd.to_numeric(df["id"], errors="coerce").max()) + 1
     except:
         return len(df) + 1
-
 
 st.markdown("""
 <style>
@@ -185,7 +188,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
@@ -194,7 +196,6 @@ if "tipo_usuario" not in st.session_state:
 
 if "influenciador_logado" not in st.session_state:
     st.session_state.influenciador_logado = ""
-
 
 if not st.session_state.logado:
 
@@ -233,7 +234,6 @@ if not st.session_state.logado:
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-
 with st.sidebar:
     st.title("Acesso")
 
@@ -250,11 +250,11 @@ with st.sidebar:
         st.session_state.influenciador_logado = ""
         st.rerun()
 
-
+# ADMIN
 if st.session_state.tipo_usuario == "admin":
 
     st.title("Painel Financeiro Zoy")
-    st.write("Crie novas ordens de pagamento, acompanhe NFs e atualize status financeiros.")
+    st.write("Crie, edite, exclua e acompanhe ordens de pagamento.")
 
     with st.expander("+ Nova Ordem de Pagamento", expanded=False):
 
@@ -341,7 +341,6 @@ if st.session_state.tipo_usuario == "admin":
                         senha_acesso=senha_op,
                         novo_influenciador=(tipo_influenciador == "Cadastrar novo influenciador")
                     )
-
                     st.success("OP criada com sucesso! O influenciador foi notificado por e-mail.")
                 except Exception as e:
                     st.warning("OP criada com sucesso, mas o e-mail não foi enviado.")
@@ -359,48 +358,41 @@ if st.session_state.tipo_usuario == "admin":
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">Total em OPs</div>
-            <div class="card-value">{moeda(total_op)}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>Total em OPs</div><div class='card-value'>{moeda(total_op)}</div></div>", unsafe_allow_html=True)
 
     with col2:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">NF Enviada</div>
-            <div class="card-value">{moeda(total_nf_enviada)}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>NF Enviada</div><div class='card-value'>{moeda(total_nf_enviada)}</div></div>", unsafe_allow_html=True)
 
     with col3:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">Pagamento Programado</div>
-            <div class="card-value">{moeda(total_programado)}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>Pagamento Programado</div><div class='card-value'>{moeda(total_programado)}</div></div>", unsafe_allow_html=True)
 
     with col4:
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">Pago</div>
-            <div class="card-value">{moeda(total_pago)}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>Pago</div><div class='card-value'>{moeda(total_pago)}</div></div>", unsafe_allow_html=True)
 
     st.markdown("---")
 
-    status_filtro = st.selectbox(
-        "Filtrar por status",
-        ["Todos", "Aguardando Nota Fiscal", "NF Enviada", "NF Reprovada", "Pagamento Programado", "Pago"]
-    )
+    col_filtro1, col_filtro2 = st.columns([1, 2])
+
+    with col_filtro1:
+        status_filtro = st.selectbox(
+            "Filtrar por status",
+            ["Todos", "Aguardando Nota Fiscal", "NF Enviada", "NF Reprovada", "Pagamento Programado", "Pago"]
+        )
+
+    with col_filtro2:
+        busca = st.text_input("Buscar por influenciador ou campanha")
 
     if status_filtro != "Todos":
         df_admin = df[df["status"] == status_filtro]
     else:
-        df_admin = df
+        df_admin = df.copy()
+
+    if busca:
+        busca_lower = busca.lower()
+        df_admin = df_admin[
+            df_admin["influenciador"].astype(str).str.lower().str.contains(busca_lower, na=False) |
+            df_admin["campanha"].astype(str).str.lower().str.contains(busca_lower, na=False)
+        ]
 
     st.subheader("Ordens de Pagamento")
 
@@ -448,9 +440,52 @@ if st.session_state.tipo_usuario == "admin":
                 st.info("Status alterado para Aguardando Nota Fiscal.")
                 st.rerun()
 
+        with st.expander(f"Editar OP — {row['campanha']}"):
+
+            edit_influ = st.text_input("Influenciador", value=str(row["influenciador"]), key=f"edit_influ_{index}")
+            edit_campanha = st.text_input("Campanha", value=str(row["campanha"]), key=f"edit_campanha_{index}")
+            edit_valor = st.number_input("Valor", value=float(row["valor"]), min_value=0.0, step=100.0, key=f"edit_valor_{index}")
+            edit_tomador = st.text_input("Tomador", value=str(row["tomador"]), key=f"edit_tomador_{index}")
+            edit_cnpj = st.text_input("CNPJ", value=str(row["cnpj"]), key=f"edit_cnpj_{index}")
+            edit_endereco = st.text_input("Endereço", value=str(row["endereco"]), key=f"edit_endereco_{index}")
+            edit_descricao = st.text_area("Descrição NF", value=str(row["descricao_nf"]), key=f"edit_desc_{index}")
+            edit_data = st.text_input("Data de criação", value=str(row["data_criacao"]), key=f"edit_data_{index}")
+            edit_prazo = st.text_input("Prazo NF", value=str(row["prazo_nf"]), key=f"edit_prazo_{index}")
+            edit_email = st.text_input("E-mail", value=str(row["email"]), key=f"edit_email_{index}")
+            edit_senha = st.text_input("Senha", value=str(row["senha"]), key=f"edit_senha_{index}")
+
+            if st.button("Salvar alterações", key=f"salvar_edit_{index}"):
+                editar_op(linha_real, {
+                    "influenciador": edit_influ,
+                    "campanha": edit_campanha,
+                    "valor": edit_valor,
+                    "tomador": edit_tomador,
+                    "cnpj": edit_cnpj,
+                    "endereco": edit_endereco,
+                    "descricao_nf": edit_descricao,
+                    "data_criacao": edit_data,
+                    "prazo_nf": edit_prazo,
+                    "email": edit_email,
+                    "senha": edit_senha
+                })
+                st.success("OP editada com sucesso.")
+                st.rerun()
+
+        with st.expander(f"Excluir OP — {row['campanha']}"):
+            st.warning("Atenção: essa ação apaga a OP da planilha e não pode ser desfeita.")
+            confirmar = st.checkbox("Confirmo que desejo excluir esta OP", key=f"confirmar_excluir_{index}")
+
+            if st.button("Excluir definitivamente", key=f"excluir_{index}"):
+                if confirmar:
+                    excluir_op(linha_real)
+                    st.success("OP excluída com sucesso.")
+                    st.rerun()
+                else:
+                    st.error("Marque a confirmação antes de excluir.")
+
     st.stop()
 
-
+# INFLUENCIADOR
 influenciador_selecionado = st.session_state.influenciador_logado
 
 df_filtrado = df[df["influenciador"] == influenciador_selecionado]
@@ -466,31 +501,13 @@ st.write(f"Olá, **{influenciador_selecionado}**. Gerencie seus recebíveis, aco
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.markdown(f"""
-    <div class="card">
-        <div class="card-title">Total Recebido</div>
-        <div class="card-value">{moeda(total_recebido)}</div>
-        <div class="small">Valor total já pago em sua conta.</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<div class='card'><div class='card-title'>Total Recebido</div><div class='card-value'>{moeda(total_recebido)}</div><div class='small'>Valor total já pago em sua conta.</div></div>", unsafe_allow_html=True)
 
 with col2:
-    st.markdown(f"""
-    <div class="card">
-        <div class="card-title">Valor Estimado</div>
-        <div class="card-value">{moeda(valor_estimado)}</div>
-        <div class="small">Valores ainda sem nota ou pendentes de liberação.</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<div class='card'><div class='card-title'>Valor Estimado</div><div class='card-value'>{moeda(valor_estimado)}</div><div class='small'>Valores ainda sem nota ou pendentes de liberação.</div></div>", unsafe_allow_html=True)
 
 with col3:
-    st.markdown(f"""
-    <div class="card">
-        <div class="card-title">Aguardando Pagamento</div>
-        <div class="card-value">{moeda(aguardando_pagamento)}</div>
-        <div class="small">Notas validadas ou pagamentos agendados.</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<div class='card'><div class='card-title'>Aguardando Pagamento</div><div class='card-value'>{moeda(aguardando_pagamento)}</div><div class='small'>Notas validadas ou pagamentos agendados.</div></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 st.subheader("Extrato")
