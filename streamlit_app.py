@@ -401,28 +401,36 @@ if not st.session_state.logado:
     email_digitado = st.text_input("E-mail")
     senha_digitada = st.text_input("Senha", type="password")
 
-    if st.button("Entrar", use_container_width=True):
-        admin_email = st.secrets["admin"]["email"]
-        admin_senha = st.secrets["admin"]["senha"]
+  if st.button("Entrar", use_container_width=True):
+    admins = st.secrets["admins"]
 
-        if email_digitado.strip().lower() == admin_email.strip().lower() and senha_digitada.strip() == admin_senha.strip():
+    admin_encontrado = False
+
+    for admin in admins:
+        if (
+            email_digitado.strip().lower() == admin["email"].strip().lower()
+            and senha_digitada.strip() == admin["senha"].strip()
+        ):
+            admin_encontrado = True
+            break
+
+    if admin_encontrado:
+        st.session_state.logado = True
+        st.session_state.tipo_usuario = "admin"
+        st.rerun()
+    else:
+        usuario = df[
+            (df["email"].astype(str).str.strip().str.lower() == email_digitado.strip().lower()) &
+            (df["senha"].astype(str).str.strip() == senha_digitada.strip())
+        ]
+
+        if len(usuario) > 0:
             st.session_state.logado = True
-            st.session_state.tipo_usuario = "admin"
+            st.session_state.tipo_usuario = "influenciador"
+            st.session_state.influenciador_logado = usuario.iloc[0]["influenciador"]
             st.rerun()
         else:
-            usuario = df[
-                (df["email"].astype(str).str.strip().str.lower() == email_digitado.strip().lower()) &
-                (df["senha"].astype(str).str.strip() == senha_digitada.strip())
-            ]
-
-            if len(usuario) > 0:
-                st.session_state.logado = True
-                st.session_state.tipo_usuario = "influenciador"
-                st.session_state.influenciador_logado = usuario.iloc[0]["influenciador"]
-                st.rerun()
-            else:
-                st.error("E-mail ou senha inválidos.")
-
+            st.error("E-mail ou senha inválidos.")
     st.markdown("</div></div>", unsafe_allow_html=True)
     st.stop()
 
