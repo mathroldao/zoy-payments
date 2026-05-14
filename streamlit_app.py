@@ -16,6 +16,27 @@ WORKSHEET_NAME = "pagamentos"
 DRIVE_FOLDER_ID = "1YIOoOAMcjJq43MdiMjukVtW-AlCIQ8Jm"
 PORTAL_URL = "https://zoy-payments.streamlit.app"
 
+EXPECTED_COLUMNS = [
+    "id",
+    "influenciador",
+    "campanha",
+    "valor",
+    "status",
+    "tomador",
+    "cnpj",
+    "endereco",
+    "descricao_nf",
+    "data_criacao",
+    "prazo_nf",
+    "numero_nf",
+    "valor_nf_enviado",
+    "arquivo_nf",
+    "data_envio_nf",
+    "data_pagamento",
+    "email",
+    "senha"
+]
+
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
@@ -33,10 +54,17 @@ sheet = client.open_by_key(SPREADSHEET_ID)
 worksheet = sheet.worksheet(WORKSHEET_NAME)
 
 data = worksheet.get_all_records()
-df = pd.DataFrame(data).fillna("")
+df = pd.DataFrame(data)
 
-if len(df) > 0:
-    df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
+if df.empty:
+    df = pd.DataFrame(columns=EXPECTED_COLUMNS)
+
+for col in EXPECTED_COLUMNS:
+    if col not in df.columns:
+        df[col] = ""
+
+df = df.fillna("")
+df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
 
 resend.api_key = st.secrets["resend"]["api_key"]
 FROM_EMAIL = st.secrets["resend"]["from_email"]
@@ -401,24 +429,24 @@ if not st.session_state.logado:
     email_digitado = st.text_input("E-mail")
     senha_digitada = st.text_input("Senha", type="password")
 
-  if st.button("Entrar", use_container_width=True):
-    admins = st.secrets["admins"]
+    if st.button("Entrar", use_container_width=True):
+        admins = st.secrets["admins"]
 
-    admin_encontrado = False
+        admin_encontrado = False
 
-    for admin in admins:
-        if (
-            email_digitado.strip().lower() == admin["email"].strip().lower()
-            and senha_digitada.strip() == admin["senha"].strip()
-        ):
-            admin_encontrado = True
-            break
+        for admin in admins:
+            if (
+                email_digitado.strip().lower() == admin["email"].strip().lower()
+                and senha_digitada.strip() == admin["senha"].strip()
+            ):
+                admin_encontrado = True
+                break
 
-    if admin_encontrado:
-        st.session_state.logado = True
-        st.session_state.tipo_usuario = "admin"
-        st.rerun()
-    else:
+        if admin_encontrado:
+            st.session_state.logado = True
+            st.session_state.tipo_usuario = "admin"
+            st.rerun()
+
         usuario = df[
             (df["email"].astype(str).str.strip().str.lower() == email_digitado.strip().lower()) &
             (df["senha"].astype(str).str.strip() == senha_digitada.strip())
@@ -429,8 +457,9 @@ if not st.session_state.logado:
             st.session_state.tipo_usuario = "influenciador"
             st.session_state.influenciador_logado = usuario.iloc[0]["influenciador"]
             st.rerun()
-        else:
-            st.error("E-mail ou senha inválidos.")
+
+        st.error("E-mail ou senha inválidos.")
+
     st.markdown("</div></div>", unsafe_allow_html=True)
     st.stop()
 
@@ -494,7 +523,7 @@ if st.session_state.tipo_usuario == "admin":
         cnpj_op = st.text_input("CNPJ")
         endereco_op = st.text_input("Endereço")
         descricao_nf_op = st.text_area(
-            "Descrição sugerida da NF",
+            "Descrição obrigatória da NF",
             value="Serviço de divulgação publicitária em campanha de marketing de influência."
         )
 
@@ -654,7 +683,7 @@ if st.session_state.tipo_usuario == "admin":
             edit_tomador = st.text_input("Tomador", value=str(row["tomador"]), key=f"edit_tomador_{index}")
             edit_cnpj = st.text_input("CNPJ", value=str(row["cnpj"]), key=f"edit_cnpj_{index}")
             edit_endereco = st.text_input("Endereço", value=str(row["endereco"]), key=f"edit_endereco_{index}")
-            edit_descricao = st.text_area("Descrição NF", value=str(row["descricao_nf"]), key=f"edit_desc_{index}")
+            edit_descricao = st.text_area("Descrição obrigatória da NF", value=str(row["descricao_nf"]), key=f"edit_desc_{index}")
             edit_data = st.text_input("Data de criação", value=str(row["data_criacao"]), key=f"edit_data_{index}")
             edit_prazo = st.text_input("Prazo NF", value=str(row["prazo_nf"]), key=f"edit_prazo_{index}")
             edit_data_pagamento = st.text_input("Data prevista de pagamento", value=str(row.get("data_pagamento", "")), key=f"edit_data_pagamento_{index}")
@@ -760,7 +789,7 @@ for i, pagamento in enumerate(pagamentos):
             <p><b>Razão social:</b> {pagamento["tomador"]}</p>
             <p><b>CNPJ:</b> {pagamento["cnpj"]}</p>
             <p><b>Endereço:</b> {pagamento["endereco"]}</p>
-            <p><b>Descrição sugerida da NF:</b> {pagamento["descricao_nf"]}</p>
+            <p><b>Descrição obrigatória da NF:</b> {pagamento["descricao_nf"]}</p>
             <p><b>Valor da NF:</b> {moeda(pagamento["valor"])}</p>
             <p><b>Prazo para envio:</b> {pagamento["prazo_nf"]}</p>
             <p><b>Data prevista de pagamento:</b> {pagamento.get("data_pagamento", "")}</p>
