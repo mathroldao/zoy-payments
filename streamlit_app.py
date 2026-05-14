@@ -13,10 +13,11 @@ st.set_page_config(page_title="Zoy Finance", layout="wide")
 
 SPREADSHEET_ID = "1R6TCMWI-cExcAg431-EOjY0DAP6VNJynFUHJpNcMCGU"
 WORKSHEET_NAME = "pagamentos"
+NF_WORKSHEET_NAME = "notas_fiscais"
 DRIVE_FOLDER_ID = "1YIOoOAMcjJq43MdiMjukVtW-AlCIQ8Jm"
 PORTAL_URL = "https://zoy-payments.streamlit.app"
 
-EXPECTED_COLUMNS = [
+PAGAMENTOS_COLUMNS = [
     "id",
     "influenciador",
     "campanha",
@@ -37,6 +38,17 @@ EXPECTED_COLUMNS = [
     "senha"
 ]
 
+NF_COLUMNS = [
+    "op_id",
+    "influenciador",
+    "campanha",
+    "numero_nf",
+    "valor_nf",
+    "arquivo_nf",
+    "data_envio_nf",
+    "status_nf"
+]
+
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
@@ -52,19 +64,32 @@ drive_service = build("drive", "v3", credentials=creds)
 
 sheet = client.open_by_key(SPREADSHEET_ID)
 worksheet = sheet.worksheet(WORKSHEET_NAME)
+nf_worksheet = sheet.worksheet(NF_WORKSHEET_NAME)
 
 data = worksheet.get_all_records()
 df = pd.DataFrame(data)
 
 if df.empty:
-    df = pd.DataFrame(columns=EXPECTED_COLUMNS)
+    df = pd.DataFrame(columns=PAGAMENTOS_COLUMNS)
 
-for col in EXPECTED_COLUMNS:
+for col in PAGAMENTOS_COLUMNS:
     if col not in df.columns:
         df[col] = ""
 
 df = df.fillna("")
 df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
+
+nf_data = nf_worksheet.get_all_records()
+df_nf = pd.DataFrame(nf_data)
+
+if df_nf.empty:
+    df_nf = pd.DataFrame(columns=NF_COLUMNS)
+
+for col in NF_COLUMNS:
+    if col not in df_nf.columns:
+        df_nf[col] = ""
+
+df_nf = df_nf.fillna("")
 
 resend.api_key = st.secrets["resend"]["api_key"]
 FROM_EMAIL = st.secrets["resend"]["from_email"]
@@ -76,6 +101,13 @@ def moeda(valor):
     except:
         valor = 0
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def normalizar_id(valor):
+    try:
+        return str(int(float(valor)))
+    except:
+        return str(valor).strip()
 
 
 def status_config(status):
@@ -90,6 +122,9 @@ def status_config(status):
 
 
 def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf, data_pagamento, email_acesso, senha_acesso, novo_influenciador):
+    if not destinatario:
+        return
+
     if novo_influenciador:
         assunto = "Seu acesso ao Portal Financeiro Zoy foi criado"
         html = f"""
@@ -132,6 +167,50 @@ def enviar_email_nova_op(destinatario, influenciador, campanha, valor, prazo_nf,
     })
 
 
+def enviar_email_op_editada(destinatario, influenciador, campanha):
+    if not destinatario:
+        return
+
+    assunto = "Sua ordem de pagamento foi atualizada"
+    html = f"""
+    <p>Olá, {influenciador}.</p>
+    <p>Os dados da sua ordem de pagamento foram atualizados no Portal Financeiro Zoy.</p>
+    <p><b>Campanha:</b> {campanha}</p>
+    <p>Por favor, acesse o portal para conferir as informações atualizadas antes de emitir ou reenviar sua nota fiscal.</p>
+    <p><a href="{PORTAL_URL}">{PORTAL_URL}</a></p>
+    <p>Atenciosamente,<br>Equipe Zoy</p>
+    """
+
+    resend.Emails.send({
+        "from": FROM_EMAIL,
+        "to": [destinatario],
+        "subject": assunto,
+        "html": html,
+    })
+
+
+def enviar_email_nf_reprovada(destinatario, influenciador, campanha):
+    if not destinatario:
+        return
+
+    assunto = "Sua nota fiscal precisa ser reenviada"
+    html = f"""
+    <p>Olá, {influenciador}.</p>
+    <p>A nota fiscal enviada para a campanha abaixo precisa de ajuste e foi reprovada pelo financeiro.</p>
+    <p><b>Campanha:</b> {campanha}</p>
+    <p>Por favor, acesse o Portal Financeiro Zoy e envie uma nova nota fiscal.</p>
+    <p><a href="{PORTAL_URL}">{PORTAL_URL}</a></p>
+    <p>Atenciosamente,<br>Equipe Zoy</p>
+    """
+
+    resend.Emails.send({
+        "from": FROM_EMAIL,
+        "to": [destinatario],
+        "subject": assunto,
+        "html": html,
+    })
+
+
 def upload_pdf_drive(arquivo, campanha, influenciador):
     file_name = f"NF - {influenciador} - {campanha} - {arquivo.name}"
 
@@ -156,16 +235,33 @@ def upload_pdf_drive(arquivo, campanha, influenciador):
     return uploaded_file.get("webViewLink")
 
 
-def atualizar_nf(row_index, numero, valor, link_arquivo):
-    worksheet.update(f"L{row_index}:L{row_index}", [[numero]])
-    worksheet.update(f"M{row_index}:M{row_index}", [[valor]])
-    worksheet.update(f"N{row_index}:N{row_index}", [[link_arquivo]])
-    worksheet.update(f"O{row_index}:O{row_index}", [[datetime.now().strftime("%d/%m/%Y %H:%M")]])
-    worksheet.update(f"E{row_index}:E{row_index}", [["NF Enviada"]])
+def append_nf(op_id, influenciador, campanha, numero_nf, valor_nf, link_arquivo):
+    nf_worksheet.append_row([
+        normalizar_id(op_id),
+        influenciador,
+        campanha,
+        numero_nf,
+        valor_nf,
+        link_arquivo,
+        datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "Enviada"
+    ], value_input_option="USER_ENTERED")
 
 
 def atualizar_status(row_index, novo_status):
     worksheet.update(f"E{row_index}:E{row_index}", [[novo_status]])
+
+
+def atualizar_notas_status_por_op(op_id, novo_status_nf):
+    op_id_norm = normalizar_id(op_id)
+
+    if df_nf.empty:
+        return
+
+    for index, row in df_nf.iterrows():
+        if normalizar_id(row.get("op_id", "")) == op_id_norm:
+            linha_real_nf = index + 2
+            nf_worksheet.update(f"H{linha_real_nf}:H{linha_real_nf}", [[novo_status_nf]])
 
 
 def editar_op(row_index, dados):
@@ -206,6 +302,16 @@ def proximo_id():
         return int(pd.to_numeric(df["id"], errors="coerce").max()) + 1
     except:
         return len(df) + 1
+
+
+def buscar_nfs_da_op(op_id):
+    op_id_norm = normalizar_id(op_id)
+
+    if df_nf.empty:
+        return pd.DataFrame(columns=NF_COLUMNS)
+
+    resultado = df_nf[df_nf["op_id"].apply(normalizar_id) == op_id_norm]
+    return resultado
 
 
 def mostrar_logo(width=110):
@@ -431,7 +537,6 @@ if not st.session_state.logado:
 
     if st.button("Entrar", use_container_width=True):
         admins = st.secrets["admins"]
-
         admin_encontrado = False
 
         for admin in admins:
@@ -581,7 +686,7 @@ if st.session_state.tipo_usuario == "admin":
 
     total_op = df["valor"].sum()
     total_nf_enviada = df[df["status"] == "NF Enviada"]["valor"].sum()
-    total_programado = df[df["status"] == "Pagamento Programado"]["valor"].sum()
+    total_reprovada = df[df["status"] == "NF Reprovada"]["valor"].sum()
     total_pago = df[df["status"] == "Pago"]["valor"].sum()
 
     col1, col2, col3, col4 = st.columns(4)
@@ -591,7 +696,7 @@ if st.session_state.tipo_usuario == "admin":
     with col2:
         st.markdown(f"<div class='card'><div class='card-title'>NF Enviada</div><div class='card-value'>{moeda(total_nf_enviada)}</div><div class='card-caption'>Aguardando análise</div></div>", unsafe_allow_html=True)
     with col3:
-        st.markdown(f"<div class='card'><div class='card-title'>Pagamento Programado</div><div class='card-value'>{moeda(total_programado)}</div><div class='card-caption'>Em processamento</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>NF Reprovada</div><div class='card-value'>{moeda(total_reprovada)}</div><div class='card-caption'>Aguardando reenvio</div></div>", unsafe_allow_html=True)
     with col4:
         st.markdown(f"<div class='card'><div class='card-title'>Pago</div><div class='card-value'>{moeda(total_pago)}</div><div class='card-caption'>Concluído</div></div>", unsafe_allow_html=True)
 
@@ -624,14 +729,13 @@ if st.session_state.tipo_usuario == "admin":
 
     for index, row in df_admin.iterrows():
         linha_real = index + 2
+        op_id = row["id"]
         badge_text, badge_bg, badge_color, _ = status_config(row["status"])
 
         valor_formatado = moeda(row["valor"])
         influenciador = row["influenciador"]
         campanha = row["campanha"]
         data_pagamento = row.get("data_pagamento", "")
-        numero_nf = row.get("numero_nf", "")
-        data_envio_nf = row.get("data_envio_nf", "")
 
         admin_card_html = f"""
         <div class="op-card">
@@ -640,28 +744,55 @@ if st.session_state.tipo_usuario == "admin":
             <div class="op-line"><b>Influenciador:</b> {influenciador}</div>
             <div class="op-line"><b>Campanha:</b> {campanha}</div>
             <div class="op-line"><b>Pagamento previsto:</b> {data_pagamento}</div>
-            <div class="op-line"><b>Número NF:</b> {numero_nf}</div>
-            <div class="small">Data envio NF: {data_envio_nf}</div>
         </div>
         """
 
         st.markdown(admin_card_html, unsafe_allow_html=True)
 
-        if row.get("arquivo_nf", ""):
-            st.markdown(f"[Abrir NF enviada]({row['arquivo_nf']})")
+        nfs_op = buscar_nfs_da_op(op_id)
+
+        with st.expander(f"Notas fiscais enviadas — {campanha}"):
+            if len(nfs_op) == 0:
+                st.info("Nenhuma NF enviada para esta OP ainda.")
+            else:
+                for _, nf in nfs_op.iterrows():
+                    st.markdown(f"""
+                    <div class="info-box">
+                        <p><b>Número NF:</b> {nf.get("numero_nf", "")}</p>
+                        <p><b>Valor NF:</b> {moeda(nf.get("valor_nf", 0))}</p>
+                        <p><b>Data envio:</b> {nf.get("data_envio_nf", "")}</p>
+                        <p><b>Status NF:</b> {nf.get("status_nf", "")}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    if nf.get("arquivo_nf", ""):
+                        st.markdown(f"[Abrir NF enviada]({nf['arquivo_nf']})")
 
         col_a, col_b, col_c, col_d = st.columns(4)
 
         with col_a:
             if st.button("Aprovar NF", key=f"aprovar_{index}"):
                 atualizar_status(linha_real, "Pagamento Programado")
+                atualizar_notas_status_por_op(op_id, "Aprovada")
                 st.success("NF aprovada. Status alterado para Pagamento Programado.")
                 st.rerun()
 
         with col_b:
             if st.button("Reprovar NF", key=f"reprovar_{index}"):
                 atualizar_status(linha_real, "NF Reprovada")
-                st.warning("NF reprovada. Influenciador poderá reenviar.")
+                atualizar_notas_status_por_op(op_id, "Reprovada")
+
+                try:
+                    enviar_email_nf_reprovada(
+                        destinatario=row.get("email", ""),
+                        influenciador=row.get("influenciador", ""),
+                        campanha=row.get("campanha", "")
+                    )
+                    st.warning("NF reprovada. O influenciador foi notificado e poderá reenviar.")
+                except Exception as e:
+                    st.warning("NF reprovada, mas o e-mail de notificação não foi enviado.")
+                    st.write(str(e))
+
                 st.rerun()
 
         with col_c:
@@ -705,7 +836,18 @@ if st.session_state.tipo_usuario == "admin":
                     "email": edit_email,
                     "senha": edit_senha
                 })
-                st.success("OP editada com sucesso.")
+
+                try:
+                    enviar_email_op_editada(
+                        destinatario=edit_email,
+                        influenciador=edit_influ,
+                        campanha=edit_campanha
+                    )
+                    st.success("OP editada com sucesso. O influenciador foi notificado.")
+                except Exception as e:
+                    st.success("OP editada com sucesso, mas o e-mail de notificação não foi enviado.")
+                    st.write(str(e))
+
                 st.rerun()
 
         with st.expander(f"Excluir OP — {row['campanha']}"):
@@ -783,6 +925,9 @@ for i, pagamento in enumerate(pagamentos):
 
     st.markdown(card_html, unsafe_allow_html=True)
 
+    op_id = pagamento["id"]
+    nfs_op = buscar_nfs_da_op(op_id)
+
     with st.expander(f"Ver dados da NF — {pagamento['campanha']}"):
         st.markdown(f"""
         <div class="info-box">
@@ -790,39 +935,68 @@ for i, pagamento in enumerate(pagamentos):
             <p><b>CNPJ:</b> {pagamento["cnpj"]}</p>
             <p><b>Endereço:</b> {pagamento["endereco"]}</p>
             <p><b>Descrição obrigatória da NF:</b> {pagamento["descricao_nf"]}</p>
-            <p><b>Valor da NF:</b> {moeda(pagamento["valor"])}</p>
+            <p><b>Valor da OP:</b> {moeda(pagamento["valor"])}</p>
             <p><b>Prazo para envio:</b> {pagamento["prazo_nf"]}</p>
             <p><b>Data prevista de pagamento:</b> {pagamento.get("data_pagamento", "")}</p>
         </div>
         """, unsafe_allow_html=True)
 
-        if pagamento["status"] in ["Aguardando Nota Fiscal", "NF Reprovada"]:
-            st.markdown("### Enviar Nota Fiscal")
+        st.markdown("### Notas fiscais já enviadas")
+
+        if len(nfs_op) == 0:
+            st.info("Nenhuma NF enviada ainda.")
+        else:
+            for _, nf in nfs_op.iterrows():
+                st.markdown(f"""
+                <div class="info-box">
+                    <p><b>Número NF:</b> {nf.get("numero_nf", "")}</p>
+                    <p><b>Valor NF:</b> {moeda(nf.get("valor_nf", 0))}</p>
+                    <p><b>Data envio:</b> {nf.get("data_envio_nf", "")}</p>
+                    <p><b>Status:</b> {nf.get("status_nf", "")}</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                if nf.get("arquivo_nf", ""):
+                    st.markdown(f"[Abrir NF enviada]({nf['arquivo_nf']})")
+
+        if pagamento["status"] in ["Aguardando Nota Fiscal", "NF Reprovada", "NF Enviada"]:
+            st.markdown("### Enviar nova Nota Fiscal")
+
             numero = st.text_input("Número da NF", key=f"numero_{i}")
-            valor_nf = st.text_input("Valor da NF", value=moeda(pagamento["valor"]), key=f"valor_{i}")
+            valor_nf = st.text_input("Valor da NF", key=f"valor_{i}")
             arquivo = st.file_uploader("Upload da NF (PDF)", type=["pdf"], key=f"arquivo_{i}")
 
             if st.button("Enviar NF", key=f"botao_{i}"):
                 if not numero:
                     st.error("Preencha o número da NF antes de enviar.")
+                elif not valor_nf:
+                    st.error("Preencha o valor da NF antes de enviar.")
                 elif not arquivo:
                     st.error("Anexe o PDF da NF antes de enviar.")
                 else:
                     try:
                         linha_real = df_filtrado.index[i] + 2
+
                         link_arquivo = upload_pdf_drive(
                             arquivo,
                             pagamento["campanha"],
                             influenciador_selecionado
                         )
-                        atualizar_nf(
-                            linha_real,
-                            numero,
-                            valor_nf,
-                            link_arquivo
+
+                        append_nf(
+                            op_id=pagamento["id"],
+                            influenciador=influenciador_selecionado,
+                            campanha=pagamento["campanha"],
+                            numero_nf=numero,
+                            valor_nf=valor_nf,
+                            link_arquivo=link_arquivo
                         )
+
+                        atualizar_status(linha_real, "NF Enviada")
+
                         st.success("NF enviada com sucesso! O arquivo foi salvo no Drive e o status foi atualizado.")
                         st.rerun()
+
                     except Exception as e:
                         st.error("Erro ao enviar a NF.")
                         st.write(str(e))
