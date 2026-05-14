@@ -522,6 +522,9 @@ if "tipo_usuario" not in st.session_state:
 if "influenciador_logado" not in st.session_state:
     st.session_state.influenciador_logado = ""
 
+if "mostrar_nf_extra" not in st.session_state:
+    st.session_state.mostrar_nf_extra = {}
+
 
 if not st.session_state.logado:
     st.markdown("<div class='login-shell'><div class='login-card'>", unsafe_allow_html=True)
@@ -959,46 +962,71 @@ for i, pagamento in enumerate(pagamentos):
                 if nf.get("arquivo_nf", ""):
                     st.markdown(f"[Abrir NF enviada]({nf['arquivo_nf']})")
 
-        if pagamento["status"] in ["Aguardando Nota Fiscal", "NF Reprovada", "NF Enviada"]:
-            st.markdown("### Enviar nova Nota Fiscal")
+        pode_enviar_nf = pagamento["status"] in ["Aguardando Nota Fiscal", "NF Reprovada", "NF Enviada"]
 
-            numero = st.text_input("Número da NF", key=f"numero_{i}")
-            valor_nf = st.text_input("Valor da NF", key=f"valor_{i}")
-            arquivo = st.file_uploader("Upload da NF (PDF)", type=["pdf"], key=f"arquivo_{i}")
+        if pode_enviar_nf:
+            if len(nfs_op) == 0:
+                st.markdown("### Enviar Nota Fiscal")
+                numero_label = "Número da NF"
+                valor_label = "Valor da NF"
+                arquivo_label = "Upload da NF (PDF)"
+                botao_label = "Enviar NF"
+                prefixo_key = "principal"
+                mostrar_formulario = True
+            else:
+                st.markdown("### Tem mais alguma NF para enviar?")
+                escolha_nf_extra = st.radio(
+                    "Selecione uma opção",
+                    ["Não", "Sim, adicionar outra NF"],
+                    key=f"radio_nf_extra_{op_id}_{i}",
+                    horizontal=True
+                )
 
-            if st.button("Enviar NF", key=f"botao_{i}"):
-                if not numero:
-                    st.error("Preencha o número da NF antes de enviar.")
-                elif not valor_nf:
-                    st.error("Preencha o valor da NF antes de enviar.")
-                elif not arquivo:
-                    st.error("Anexe o PDF da NF antes de enviar.")
-                else:
-                    try:
-                        linha_real = df_filtrado.index[i] + 2
+                mostrar_formulario = escolha_nf_extra == "Sim, adicionar outra NF"
+                numero_label = "Número da NF adicional"
+                valor_label = "Valor da NF adicional"
+                arquivo_label = "Upload da NF adicional (PDF)"
+                botao_label = "Enviar NF adicional"
+                prefixo_key = "extra"
 
-                        link_arquivo = upload_pdf_drive(
-                            arquivo,
-                            pagamento["campanha"],
-                            influenciador_selecionado
-                        )
+            if mostrar_formulario:
+                numero = st.text_input(numero_label, key=f"numero_{prefixo_key}_{op_id}_{i}")
+                valor_nf = st.text_input(valor_label, key=f"valor_{prefixo_key}_{op_id}_{i}")
+                arquivo = st.file_uploader(arquivo_label, type=["pdf"], key=f"arquivo_{prefixo_key}_{op_id}_{i}")
 
-                        append_nf(
-                            op_id=pagamento["id"],
-                            influenciador=influenciador_selecionado,
-                            campanha=pagamento["campanha"],
-                            numero_nf=numero,
-                            valor_nf=valor_nf,
-                            link_arquivo=link_arquivo
-                        )
+                if st.button(botao_label, key=f"botao_{prefixo_key}_{op_id}_{i}"):
+                    if not numero:
+                        st.error("Preencha o número da NF antes de enviar.")
+                    elif not valor_nf:
+                        st.error("Preencha o valor da NF antes de enviar.")
+                    elif not arquivo:
+                        st.error("Anexe o PDF da NF antes de enviar.")
+                    else:
+                        try:
+                            linha_real = df_filtrado.index[i] + 2
 
-                        atualizar_status(linha_real, "NF Enviada")
+                            link_arquivo = upload_pdf_drive(
+                                arquivo,
+                                pagamento["campanha"],
+                                influenciador_selecionado
+                            )
 
-                        st.success("NF enviada com sucesso! O arquivo foi salvo no Drive e o status foi atualizado.")
-                        st.rerun()
+                            append_nf(
+                                op_id=pagamento["id"],
+                                influenciador=influenciador_selecionado,
+                                campanha=pagamento["campanha"],
+                                numero_nf=numero,
+                                valor_nf=valor_nf,
+                                link_arquivo=link_arquivo
+                            )
 
-                    except Exception as e:
-                        st.error("Erro ao enviar a NF.")
-                        st.write(str(e))
+                            atualizar_status(linha_real, "NF Enviada")
+
+                            st.success("NF enviada com sucesso! O arquivo foi salvo no Drive e o status foi atualizado.")
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error("Erro ao enviar a NF.")
+                            st.write(str(e))
         else:
             st.info("Esta ordem de pagamento não está disponível para envio de NF neste momento.")
